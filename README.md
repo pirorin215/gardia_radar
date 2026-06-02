@@ -40,7 +40,7 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 | モード | タイトル | テキスト | タイミング |
 |--------|----------|----------|------------|
 | FIRST_ONLY | Vehicle Detected! | Distance: Xm | 最初の1回のみ |
-| EVERY_TIME | New Vehicle! | N vehicles approaching | 新規車両ごと |
+| EVERY_TIME | Vehicle Approaching! | N vehicle(s) - Xm | 車両検知中は1秒ごと |
 
 ---
 
@@ -52,8 +52,8 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
  振幅255
 ```
 - **最大振幅255**で強力な振動
-- **FIRST_ONLY**: 最初の検知時に1回のみ振動（繰り返しなし）
-- **EVERY_TIME**: 新規車両検出時に1回ずつ振動（繰り返しなし）
+- **FIRST_ONLY**: 最初の検知時に1回のみ振動
+- **EVERY_TIME**: 車両検知中は1秒ごとに振動（定期通知）
 
 #### 音
 - **アラーム音**（`TYPE_ALARM`）を**最大音量**でループ再生
@@ -75,7 +75,7 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 |--------|------|
 | **OFF** | 通知なし |
 | **FIRST_ONLY** | 最初の検知時のみ通知 |
-| **EVERY_TIME** | 車両が増えるたびに通知 |
+| **EVERY_TIME** | 車両検知中は1秒ごとに通知（距離が近づいても継続通知） |
 
 ### 設定例
 
@@ -86,7 +86,8 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 | FIRST_ONLY | FIRST_ONLY | 両方とも最初のみ通知 |
 | FIRST_ONLY | OFF | Phoneのみ通知、Wearは通知なし |
 | OFF | FIRST_ONLY | Wearのみ通知、Phoneは通知なし |
-| EVERY_TIME | FIRST_ONLY | Phoneは毎回、Wearは最初のみ |
+| EVERY_TIME | FIRST_ONLY | Phoneは1秒ごと、Wearは最初のみ |
+| EVERY_TIME | EVERY_TIME | 両方とも1秒ごとに通知 |
 
 ### フルスクリーン通知設定
 

@@ -15,7 +15,11 @@ import com.pirorin215.gardiaradar.data.AppSettingsRepository
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.RadarTarget
 import com.pirorin215.gardiaradar.data.Settings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import android.util.Log
 
@@ -30,6 +34,11 @@ class RadarNotificationManager(
     private val CHANNEL_ID = "radar_alerts_v7"
     val NOTIFICATION_ID = 1001
     private var lastTargetCount = 0
+
+    // 定期通知用
+    private val notificationScope = CoroutineScope(Job())
+    private var periodicNotificationJob: Job? = null
+    private var currentTargets: List<RadarTarget> = emptyList()
 
     // Strong vibration pattern
     private val VIBRATION_PATTERN = longArrayOf(0, 1000, 200, 1000, 200, 1000)
@@ -62,6 +71,7 @@ class RadarNotificationManager(
 
     fun handleRadarUpdate(targets: List<RadarTarget>, phoneMode: NotificationMode, wearMode: NotificationMode) {
         val currentCount = targets.size
+        currentTargets = targets // 現在のターゲットを保持
 
         // 車両数が変化したときのみ詳細ログを出力
         val countChanged = currentCount != lastTargetCount
@@ -75,6 +85,14 @@ class RadarNotificationManager(
         Log.d(TAG, "=== Radar Update ===")
         Log.d(TAG, "Targets: $currentCount (last: $lastTargetCount)")
         Log.d(TAG, "Phone mode: $phoneMode, Wear mode: $wearMode")
+
+        // EVERY_TIMEモードの定期通知制御
+        val isEveryTimeMode = phoneMode == NotificationMode.EVERY_TIME || wearMode == NotificationMode.EVERY_TIME
+        if (currentCount > 0 && isEveryTimeMode) {
+            startPeriodicNotification(phoneMode, wearMode)
+        } else {
+            stopPeriodicNotification()
+        }
 
         processNotifications(targets, phoneMode, wearMode, currentCount, true)
 
@@ -101,15 +119,15 @@ class RadarNotificationManager(
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
-                    if (currentCount > lastTargetCount) {
-                        if (withLogging) Log.d(TAG, "Phone: EVERY_TIME - sending notification ($currentCount > $lastTargetCount)")
-                        notificationManager.cancel(NOTIFICATION_ID)
+                    // 初期検知時のみ通知（定期通知は別途開始）
+                    if (lastTargetCount == 0) {
+                        if (withLogging) Log.d(TAG, "Phone: EVERY_TIME - initial notification")
                         sendNotification(
-                            "New Vehicle!",
-                            "${targets.size} vehicles approaching"
+                            "Vehicle Detected!",
+                            "Distance: ${targets[0].distance}m"
                         )
                     } else if (withLogging) {
-                        Log.d(TAG, "Phone: EVERY_TIME - skipping ($currentCount <= $lastTargetCount)")
+                        Log.d(TAG, "Phone: EVERY_TIME - periodic notification active")
                     }
                 }
                 else -> {}
@@ -138,11 +156,12 @@ class RadarNotificationManager(
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
-                    if (currentCount > lastTargetCount) {
-                        if (withLogging) Log.d(TAG, "Wear: EVERY_TIME - sending alert ($currentCount > $lastTargetCount)")
+                    // 初期検知時のみ通知（定期通知は別途開始）
+                    if (lastTargetCount == 0) {
+                        if (withLogging) Log.d(TAG, "Wear: EVERY_TIME - initial alert")
                         wearMessageSender.sendRadarAlert(targets)
                     } else if (withLogging) {
-                        Log.d(TAG, "Wear: EVERY_TIME - skipping ($currentCount <= $lastTargetCount)")
+                        Log.d(TAG, "Wear: EVERY_TIME - periodic notification active")
                     }
                 }
                 else -> {}
@@ -207,5 +226,39 @@ class RadarNotificationManager(
         val notification = builder.build()
 
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun startPeriodicNotification(phoneMode: NotificationMode, wearMode: NotificationMode) {
+        stopPeriodicNotification() // 既存のジョブをキャンセル
+
+        periodicNotificationJob = notificationScope.launch {
+            while (true) {
+                delay(1000) // 1秒待機
+
+                if (currentTargets.isNotEmpty()) {
+                    // Phone通知
+                    if (phoneMode == NotificationMode.EVERY_TIME) {
+                        sendNotification(
+                            "Vehicle Approaching!",
+                            "${currentTargets.size} vehicle(s) - ${currentTargets[0].distance}m"
+                        )
+                        Log.d(TAG, "Periodic: Phone notification sent")
+                    }
+
+                    // Wear通知
+                    if (wearMode == NotificationMode.EVERY_TIME) {
+                        wearMessageSender.sendRadarAlert(currentTargets)
+                        Log.d(TAG, "Periodic: Wear alert sent")
+                    }
+                }
+            }
+        }
+        Log.d(TAG, "Periodic notification started")
+    }
+
+    private fun stopPeriodicNotification() {
+        periodicNotificationJob?.cancel()
+        periodicNotificationJob = null
+        Log.d(TAG, "Periodic notification stopped")
     }
 }
