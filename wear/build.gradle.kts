@@ -9,7 +9,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.pirorin215.gardiaradar.wear"
+        applicationId = "com.pirorin215.gardiaradar"
         minSdk = 30
         targetSdk = 33
         versionCode = 1
