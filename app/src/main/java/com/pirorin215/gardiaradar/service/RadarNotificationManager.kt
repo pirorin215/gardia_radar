@@ -58,24 +58,20 @@ class RadarNotificationManager(
         }
     }
 
-    fun handleRadarUpdate(targets: List<RadarTarget>, mode: NotificationMode) {
-        if (mode == NotificationMode.OFF) {
-            notificationManager.cancelAll()
-            lastTargetCount = targets.size
-            return
-        }
-
+    fun handleRadarUpdate(targets: List<RadarTarget>, phoneMode: NotificationMode, wearMode: NotificationMode) {
         val currentCount = targets.size
 
-        if (currentCount > 0) {
-            when (mode) {
+        // Handle phone notifications
+        if (phoneMode == NotificationMode.OFF) {
+            notificationManager.cancel(NOTIFICATION_ID)
+        } else if (currentCount > 0) {
+            when (phoneMode) {
                 NotificationMode.FIRST_ONLY -> {
                     if (lastTargetCount == 0) {
                         sendNotification(
                             "Vehicle Detected!",
                             "Distance: ${targets[0].distance}m"
                         )
-                        wearMessageSender.sendRadarAlert(targets)
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
@@ -85,7 +81,6 @@ class RadarNotificationManager(
                             "New Vehicle!",
                             "${targets.size} vehicles approaching"
                         )
-                        wearMessageSender.sendRadarAlert(targets)
                     }
                 }
                 else -> {}
@@ -93,6 +88,30 @@ class RadarNotificationManager(
         } else {
             if (lastTargetCount > 0) {
                 notificationManager.cancel(NOTIFICATION_ID)
+            }
+        }
+
+        // Handle Wear notifications
+        if (wearMode == NotificationMode.OFF) {
+            if (lastTargetCount > 0 && currentCount == 0) {
+                wearMessageSender.sendRadarClear()
+            }
+        } else if (currentCount > 0) {
+            when (wearMode) {
+                NotificationMode.FIRST_ONLY -> {
+                    if (lastTargetCount == 0) {
+                        wearMessageSender.sendRadarAlert(targets)
+                    }
+                }
+                NotificationMode.EVERY_TIME -> {
+                    if (currentCount > lastTargetCount) {
+                        wearMessageSender.sendRadarAlert(targets)
+                    }
+                }
+                else -> {}
+            }
+        } else {
+            if (lastTargetCount > 0) {
                 wearMessageSender.sendRadarClear()
             }
         }

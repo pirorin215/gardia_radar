@@ -24,7 +24,8 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val currentThemeMode by viewModel.themeMode.collectAsState()
-    val currentNotificationMode by viewModel.notificationMode.collectAsState()
+    val phoneNotificationMode by viewModel.phoneNotificationMode.collectAsState()
+    val wearNotificationMode by viewModel.wearNotificationMode.collectAsState()
     val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
 
     Scaffold(
@@ -45,18 +46,42 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // --- Notification Settings ---
-            Text("Radar Notifications", style = MaterialTheme.typography.titleMedium)
+            // --- Phone Notifications ---
+            Text("Phone Notifications", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             NotificationMode.values().forEach { mode ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
-                        selected = (mode == currentNotificationMode),
-                        onClick = { viewModel.saveNotificationMode(mode) }
+                        selected = (mode == phoneNotificationMode),
+                        onClick = { viewModel.savePhoneNotificationMode(mode) }
+                    )
+                    val label = when(mode) {
+                        NotificationMode.FIRST_ONLY -> "Notify on first detection only (車列の最初だけ)"
+                        NotificationMode.EVERY_TIME -> "Notify for every new car (車が検出されるたび)"
+                        NotificationMode.OFF -> "Notifications OFF"
+                    }
+                    Text(label, fontSize = 14.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- Wear OS Notifications ---
+            Text("Wear OS Notifications", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            NotificationMode.values().forEach { mode ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = (mode == wearNotificationMode),
+                        onClick = { viewModel.saveWearNotificationMode(mode) }
                     )
                     val label = when(mode) {
                         NotificationMode.FIRST_ONLY -> "Notify on first detection only (車列の最初だけ)"

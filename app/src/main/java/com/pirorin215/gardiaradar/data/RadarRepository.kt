@@ -30,7 +30,8 @@ class RadarRepository(
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter = bluetoothManager.adapter
     private var gatt: BluetoothGatt? = null
-    private var currentNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
+    private var phoneNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
+    private var wearNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState = _connectionState.asStateFlow()
@@ -43,8 +44,14 @@ class RadarRepository(
 
     init {
         scope.launch {
-            appSettingsRepository.getFlow(Settings.NOTIFICATION_MODE).collectLatest { mode ->
-                currentNotificationMode = mode
+            appSettingsRepository.getFlow(Settings.PHONE_NOTIFICATION_MODE).collectLatest { mode ->
+                phoneNotificationMode = mode
+            }
+        }
+
+        scope.launch {
+            appSettingsRepository.getFlow(Settings.WEAR_NOTIFICATION_MODE).collectLatest { mode ->
+                wearNotificationMode = mode
             }
         }
 
@@ -184,7 +191,7 @@ class RadarRepository(
         }
 
         _targets.value = newTargets
-        notificationManager.handleRadarUpdate(newTargets, currentNotificationMode)
+        notificationManager.handleRadarUpdate(newTargets, phoneNotificationMode, wearNotificationMode)
     }
 
     fun disconnect() {

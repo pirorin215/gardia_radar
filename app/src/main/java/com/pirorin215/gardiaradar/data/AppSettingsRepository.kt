@@ -33,8 +33,15 @@ object Settings {
         fromStored = { ThemeMode.valueOf(it) }
     )
 
-    val NOTIFICATION_MODE = SettingKey.Mapped(
-        preferencesKey = stringPreferencesKey("notification_mode"),
+    val PHONE_NOTIFICATION_MODE = SettingKey.Mapped(
+        preferencesKey = stringPreferencesKey("phone_notification_mode"),
+        defaultValue = NotificationMode.FIRST_ONLY,
+        toStored = { it.name },
+        fromStored = { NotificationMode.valueOf(it) }
+    )
+
+    val WEAR_NOTIFICATION_MODE = SettingKey.Mapped(
+        preferencesKey = stringPreferencesKey("wear_notification_mode"),
         defaultValue = NotificationMode.FIRST_ONLY,
         toStored = { it.name },
         fromStored = { NotificationMode.valueOf(it) }

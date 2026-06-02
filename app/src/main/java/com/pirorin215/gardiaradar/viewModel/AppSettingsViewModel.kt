@@ -18,7 +18,10 @@ class AppSettingsViewModel(
     val themeMode: StateFlow<ThemeMode> = repository.getFlow(Settings.THEME_MODE)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
 
-    val notificationMode: StateFlow<NotificationMode> = repository.getFlow(Settings.NOTIFICATION_MODE)
+    val phoneNotificationMode: StateFlow<NotificationMode> = repository.getFlow(Settings.PHONE_NOTIFICATION_MODE)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationMode.FIRST_ONLY)
+
+    val wearNotificationMode: StateFlow<NotificationMode> = repository.getFlow(Settings.WEAR_NOTIFICATION_MODE)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationMode.FIRST_ONLY)
 
     val useFullScreenNotification: StateFlow<Boolean> = repository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
@@ -28,8 +31,12 @@ class AppSettingsViewModel(
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
 
-    fun saveNotificationMode(mode: NotificationMode) {
-        viewModelScope.launch { repository.setValue(Settings.NOTIFICATION_MODE, mode) }
+    fun savePhoneNotificationMode(mode: NotificationMode) {
+        viewModelScope.launch { repository.setValue(Settings.PHONE_NOTIFICATION_MODE, mode) }
+    }
+
+    fun saveWearNotificationMode(mode: NotificationMode) {
+        viewModelScope.launch { repository.setValue(Settings.WEAR_NOTIFICATION_MODE, mode) }
     }
 
     fun saveFullScreenNotification(enabled: Boolean) {

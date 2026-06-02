@@ -67,7 +67,7 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 
 ## 通知モード
 
-アプリ設定で以下の3モードから選択可能：
+アプリ設定で**Phone**と**Wear OS**それぞれに以下の3モードから選択可能：
 
 | モード | 動作 |
 |--------|------|
@@ -75,9 +75,20 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 | **FIRST_ONLY** | 最初の検知時のみ通知 |
 | **EVERY_TIME** | 車両が増えるたびに通知 |
 
+### 設定例
+
+ユーザーはPhoneとWear OSで異なる通知モードを設定できます：
+
+| Phone | Wear OS | 動作 |
+|-------|---------|------|
+| FIRST_ONLY | FIRST_ONLY | 両方とも最初のみ通知 |
+| FIRST_ONLY | OFF | Phoneのみ通知、Wearは通知なし |
+| OFF | FIRST_ONLY | Wearのみ通知、Phoneは通知なし |
+| EVERY_TIME | FIRST_ONLY | Phoneは毎回、Wearは最初のみ |
+
 ### フルスクリーン通知設定
 
-設定画面で「Fullscreen notification」スイッチをONにすると、ロック画面上で全画面通知が表示されます（デフォルトはOFF）。
+設定画面で「Fullscreen notification」スイッチをONにすると、ロック画面上で全画面通知が表示されます（デフォルトはOFF）。これはPhoneの通知にのみ適用されます。
 
 ---
 
