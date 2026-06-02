@@ -17,12 +17,14 @@ import com.pirorin215.gardiaradar.data.RadarTarget
 import com.pirorin215.gardiaradar.data.Settings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import android.util.Log
 
 class RadarNotificationManager(
     private val context: Context,
     private val wearMessageSender: WearMessageSender,
     private val appSettingsRepository: AppSettingsRepository
 ) {
+    private val TAG = "RadarNotificationManager"
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val CHANNEL_ID = "radar_alerts_v7"
@@ -61,32 +63,44 @@ class RadarNotificationManager(
     fun handleRadarUpdate(targets: List<RadarTarget>, phoneMode: NotificationMode, wearMode: NotificationMode) {
         val currentCount = targets.size
 
+        Log.d(TAG, "=== Radar Update ===")
+        Log.d(TAG, "Targets: $currentCount (last: $lastTargetCount)")
+        Log.d(TAG, "Phone mode: $phoneMode, Wear mode: $wearMode")
+
         // Handle phone notifications
         if (phoneMode == NotificationMode.OFF) {
             notificationManager.cancel(NOTIFICATION_ID)
+            Log.d(TAG, "Phone: OFF - notification cancelled")
         } else if (currentCount > 0) {
             when (phoneMode) {
                 NotificationMode.FIRST_ONLY -> {
                     if (lastTargetCount == 0) {
+                        Log.d(TAG, "Phone: FIRST_ONLY - sending notification")
                         sendNotification(
                             "Vehicle Detected!",
                             "Distance: ${targets[0].distance}m"
                         )
+                    } else {
+                        Log.d(TAG, "Phone: FIRST_ONLY - skipping (already notified)")
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
                     if (currentCount > lastTargetCount) {
+                        Log.d(TAG, "Phone: EVERY_TIME - sending notification ($currentCount > $lastTargetCount)")
                         notificationManager.cancel(NOTIFICATION_ID)
                         sendNotification(
                             "New Vehicle!",
                             "${targets.size} vehicles approaching"
                         )
+                    } else {
+                        Log.d(TAG, "Phone: EVERY_TIME - skipping ($currentCount <= $lastTargetCount)")
                     }
                 }
                 else -> {}
             }
         } else {
             if (lastTargetCount > 0) {
+                Log.d(TAG, "Phone: targets cleared - cancelling notification")
                 notificationManager.cancel(NOTIFICATION_ID)
             }
         }
@@ -94,29 +108,38 @@ class RadarNotificationManager(
         // Handle Wear notifications
         if (wearMode == NotificationMode.OFF) {
             if (lastTargetCount > 0 && currentCount == 0) {
+                Log.d(TAG, "Wear: OFF - sending clear")
                 wearMessageSender.sendRadarClear()
             }
         } else if (currentCount > 0) {
             when (wearMode) {
                 NotificationMode.FIRST_ONLY -> {
                     if (lastTargetCount == 0) {
+                        Log.d(TAG, "Wear: FIRST_ONLY - sending alert")
                         wearMessageSender.sendRadarAlert(targets)
+                    } else {
+                        Log.d(TAG, "Wear: FIRST_ONLY - skipping (already notified)")
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
                     if (currentCount > lastTargetCount) {
+                        Log.d(TAG, "Wear: EVERY_TIME - sending alert ($currentCount > $lastTargetCount)")
                         wearMessageSender.sendRadarAlert(targets)
+                    } else {
+                        Log.d(TAG, "Wear: EVERY_TIME - skipping ($currentCount <= $lastTargetCount)")
                     }
                 }
                 else -> {}
             }
         } else {
             if (lastTargetCount > 0) {
+                Log.d(TAG, "Wear: targets cleared - sending clear")
                 wearMessageSender.sendRadarClear()
             }
         }
 
         lastTargetCount = currentCount
+        Log.d(TAG, "==================")
     }
 
     private fun sendNotification(title: String, text: String) {
