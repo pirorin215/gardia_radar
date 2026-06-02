@@ -8,6 +8,7 @@ import android.content.Context
 import android.util.Log
 import com.pirorin215.gardiaradar.service.RadarNotificationManager
 import com.pirorin215.gardiaradar.service.RadarScanServiceManager
+import com.pirorin215.gardiaradar.service.WearableDataHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,8 @@ class RadarRepository(
     private val context: Context,
     private val scope: CoroutineScope,
     private val appSettingsRepository: AppSettingsRepository,
-    private val notificationManager: RadarNotificationManager
+    private val notificationManager: RadarNotificationManager,
+    private val wearableDataHost: WearableDataHost
 ) {
     private val TAG = "RadarRepository"
     private val TARGET_CHAR_UUID = UUID.fromString("f3641401-00b0-4240-ba50-05ca45bf8abc")
@@ -191,6 +193,10 @@ class RadarRepository(
         }
 
         _targets.value = newTargets
+
+        // Wear OSに車列データを送信
+        wearableDataHost.putTargetsData(newTargets)
+
         notificationManager.handleRadarUpdate(newTargets, phoneNotificationMode, wearNotificationMode)
     }
 
