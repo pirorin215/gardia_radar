@@ -39,6 +39,11 @@ object Settings {
         toStored = { it.name },
         fromStored = { NotificationMode.valueOf(it) }
     )
+
+    val USE_FULLSCREEN_NOTIFICATION = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("use_fullscreen_notification"),
+        defaultValue = false
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {

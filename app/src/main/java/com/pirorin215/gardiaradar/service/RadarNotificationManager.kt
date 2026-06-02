@@ -9,19 +9,23 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.Person
 import com.pirorin215.gardiaradar.MainActivity
 import com.pirorin215.gardiaradar.R
+import com.pirorin215.gardiaradar.data.AppSettingsRepository
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.RadarTarget
+import com.pirorin215.gardiaradar.data.Settings
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class RadarNotificationManager(
     private val context: Context,
-    private val wearMessageSender: WearMessageSender
+    private val wearMessageSender: WearMessageSender,
+    private val appSettingsRepository: AppSettingsRepository
 ) {
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val CHANNEL_ID = "radar_alerts_v6" // v6 for CallStyle
+    private val CHANNEL_ID = "radar_alerts_v7"
     val NOTIFICATION_ID = 1001
     private var lastTargetCount = 0
 
@@ -35,7 +39,7 @@ class RadarNotificationManager(
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Radar Incoming Alert"
-            val descriptionText = "Vehicle detection (Incoming call style)"
+            val descriptionText = "Vehicle detection alerts"
             val importance = NotificationManager.IMPORTANCE_HIGH
 
             val audioAttributes = AudioAttributes.Builder()
@@ -67,7 +71,7 @@ class RadarNotificationManager(
             when (mode) {
                 NotificationMode.FIRST_ONLY -> {
                     if (lastTargetCount == 0) {
-                        sendCallNotification(
+                        sendNotification(
                             "Vehicle Detected!",
                             "Distance: ${targets[0].distance}m"
                         )
@@ -77,7 +81,7 @@ class RadarNotificationManager(
                 NotificationMode.EVERY_TIME -> {
                     if (currentCount > lastTargetCount) {
                         notificationManager.cancel(NOTIFICATION_ID)
-                        sendCallNotification(
+                        sendNotification(
                             "New Vehicle!",
                             "${targets.size} vehicles approaching"
                         )
@@ -96,17 +100,23 @@ class RadarNotificationManager(
         lastTargetCount = currentCount
     }
 
-    private fun sendCallNotification(title: String, text: String) {
-        // FullScreen intent → opens app (acts as "answer")
-        val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
+    private fun sendNotification(title: String, text: String) {
+        // Get fullscreen notification setting
+        val useFullScreenNotification = runBlocking {
+            appSettingsRepository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
+                .first()
+        }
+
+        // Content intent → opens app
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            context, 0, fullScreenIntent,
+        val contentPendingIntent = PendingIntent.getActivity(
+            context, 0, contentIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Dismiss intent → cancels notification (acts as "decline")
+        // Dismiss intent → cancels notification
         val dismissIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
             action = NotificationDismissReceiver.ACTION_DISMISS
             putExtra(NotificationDismissReceiver.EXTRA_NOTIFICATION_ID, NOTIFICATION_ID)
@@ -116,31 +126,28 @@ class RadarNotificationManager(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // CallStyle caller
-        val caller = Person.Builder()
-            .setName(title)
-            .setImportant(true)
-            .build()
-
-        val callStyle = NotificationCompat.CallStyle.forIncomingCall(
-            caller,
-            fullScreenPendingIntent,  // "answer" → open app
-            dismissPendingIntent      // "decline" → dismiss notification
-        )
-
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_alert)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setStyle(callStyle)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setContentIntent(contentPendingIntent)
             .setAutoCancel(true)
             .setOngoing(false)
             .setOnlyAlertOnce(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .extend(NotificationCompat.WearableExtender())
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Dismiss",
+                dismissPendingIntent
+            )
+
+        // Fullscreen notification if enabled
+        if (useFullScreenNotification) {
+            builder.setFullScreenIntent(contentPendingIntent, true)
+        }
 
         val notification = builder.build()
         notification.flags = notification.flags or Notification.FLAG_INSISTENT

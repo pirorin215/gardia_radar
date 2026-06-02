@@ -21,11 +21,18 @@ class AppSettingsViewModel(
     val notificationMode: StateFlow<NotificationMode> = repository.getFlow(Settings.NOTIFICATION_MODE)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationMode.FIRST_ONLY)
 
+    val useFullScreenNotification: StateFlow<Boolean> = repository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
 
     fun saveNotificationMode(mode: NotificationMode) {
         viewModelScope.launch { repository.setValue(Settings.NOTIFICATION_MODE, mode) }
+    }
+
+    fun saveFullScreenNotification(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.USE_FULLSCREEN_NOTIFICATION, enabled) }
     }
 }

@@ -16,7 +16,7 @@ val appModule = module {
     single { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
     single { AppSettingsRepository(get()) }
     single { WearMessageSender(get(), get()) }
-    single { RadarNotificationManager(get(), get()) }
+    single { RadarNotificationManager(get(), get(), get()) }
     single { RadarRepository(get(), get(), get(), get()) }
 
     viewModel { RadarViewModel(get()) }

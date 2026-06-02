@@ -25,6 +25,7 @@ fun SettingsScreen(
 ) {
     val currentThemeMode by viewModel.themeMode.collectAsState()
     val currentNotificationMode by viewModel.notificationMode.collectAsState()
+    val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
 
     Scaffold(
         topBar = {
@@ -64,6 +65,28 @@ fun SettingsScreen(
                     }
                     Text(label, fontSize = 14.sp)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Fullscreen notification toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Fullscreen notification", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Show notification on lock screen (ロック画面で全画面表示)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = useFullScreenNotification,
+                    onCheckedChange = { viewModel.saveFullScreenNotification(it) }
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
