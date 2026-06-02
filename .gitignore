@@ -1,0 +1,22 @@
+# Gradle files
+.gradle/
+build/
+
+# Android Studio / IntelliJ files
+.idea/
+*.iml
+*.iws
+
+# Local configuration
+local.properties
+
+# Android build outputs
+capture/
+*.apk
+*.ap_
+
+# Kotlin files
+.kotlin/
+
+# OS files
+.DS_Store

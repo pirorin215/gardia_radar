@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">GardiaRadar</string>
+    <string name="main_screen_title">BLE Template</string>
+    <string name="no_data_message">no data</string>
+    <string name="close_button_text">Close</string>
+
+    <!-- MainScreen Menu Items -->
+    <string name="menu_app_settings">アプリ設定</string>
+    <string name="close">閉じる</string>
+    <string name="menu_app_log">アプリログ</string>
+    <string name="app_log_title">@string/menu_app_log</string>
+    <string name="more_options_content_description">More options</string>
+
+    <!-- MainScreen TopAppBar related -->
+    <string name="status_connected">（接続中）</string>
+    <string name="status_disconnected">（未接続）</string>
+    <string name="stop_app_content_description">Stop App</string>
+    <string name="force_reconnect_ble_content_description">Force Reconnect BLE</string>
+
+    <!-- AppSettingsScreen -->
+    <string name="app_settings_title">@string/menu_app_settings</string>
+    <string name="theme_mode">テーマモード</string>
+    <string name="auto_start_on_boot">OS起動時に自動開始</string>
+    <string name="save_button">保存</string>
+
+    <!-- App Notifications -->
+    <string name="notification_channel_name">アプリの通知</string>
+    <string name="notification_channel_description">BLEデバイスからのイベントや警告を通知します</string>
+
+</resources>
