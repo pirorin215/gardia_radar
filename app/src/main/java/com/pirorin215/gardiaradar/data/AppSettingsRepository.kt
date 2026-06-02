@@ -51,6 +51,11 @@ object Settings {
         preferencesKey = booleanPreferencesKey("use_fullscreen_notification"),
         defaultValue = false
     )
+
+    val CLEAR_SUPPRESSION_SECONDS = SettingKey.Direct(
+        preferencesKey = intPreferencesKey("clear_suppression_seconds"),
+        defaultValue = 10
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {

@@ -27,6 +27,9 @@ class AppSettingsViewModel(
     val useFullScreenNotification: StateFlow<Boolean> = repository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val clearSuppressionSeconds: StateFlow<Int> = repository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 10)
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -41,5 +44,9 @@ class AppSettingsViewModel(
 
     fun saveFullScreenNotification(enabled: Boolean) {
         viewModelScope.launch { repository.setValue(Settings.USE_FULLSCREEN_NOTIFICATION, enabled) }
+    }
+
+    fun saveClearSuppressionSeconds(seconds: Int) {
+        viewModelScope.launch { repository.setValue(Settings.CLEAR_SUPPRESSION_SECONDS, seconds) }
     }
 }

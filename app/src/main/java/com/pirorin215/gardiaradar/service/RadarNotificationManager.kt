@@ -34,6 +34,7 @@ class RadarNotificationManager(
     private val CHANNEL_ID = "radar_alerts_v7"
     val NOTIFICATION_ID = 1001
     private var lastTargetCount = 0
+    private var lastClearTimestamp: Long = 0
 
     // 定期通知用
     private val notificationScope = CoroutineScope(Job())
@@ -72,6 +73,32 @@ class RadarNotificationManager(
     fun handleRadarUpdate(targets: List<RadarTarget>, phoneMode: NotificationMode, wearMode: NotificationMode) {
         val currentCount = targets.size
         currentTargets = targets // 現在のターゲットを保持
+
+        // 車両がクリアされたときにタイムスタンプを記録
+        if (currentCount == 0 && lastTargetCount > 0) {
+            lastClearTimestamp = System.currentTimeMillis()
+            if (lastClearTimestamp > 0) {
+                Log.d(TAG, "Vehicles cleared. Suppression period started.")
+            }
+        }
+
+        // 新しい車列検知時：抑制時間をチェック
+        if (currentCount > 0 && lastTargetCount == 0 && lastClearTimestamp > 0) {
+            val suppressionSeconds = runBlocking {
+                appSettingsRepository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS).first()
+            }
+            val timeSinceClear = (System.currentTimeMillis() - lastClearTimestamp) / 1000
+
+            if (timeSinceClear <= suppressionSeconds) {
+                Log.d(TAG, "=== Radar Update ===")
+                Log.d(TAG, "Suppressed: Vehicles reappeared ${timeSinceClear}s after clearing (within ${suppressionSeconds}s threshold)")
+                Log.d(TAG, "Targets: $currentCount (last: $lastTargetCount)")
+                Log.d(TAG, "Phone mode: $phoneMode, Wear mode: $wearMode")
+                Log.d(TAG, "==================")
+                lastTargetCount = currentCount
+                return // 通知しない
+            }
+        }
 
         // 車両数が変化したときのみ詳細ログを出力
         val countChanged = currentCount != lastTargetCount

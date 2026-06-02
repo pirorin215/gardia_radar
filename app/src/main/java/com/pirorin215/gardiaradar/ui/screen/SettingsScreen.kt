@@ -27,6 +27,7 @@ fun SettingsScreen(
     val phoneNotificationMode by viewModel.phoneNotificationMode.collectAsState()
     val wearNotificationMode by viewModel.wearNotificationMode.collectAsState()
     val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
+    val clearSuppressionSeconds by viewModel.clearSuppressionSeconds.collectAsState()
 
     Scaffold(
         topBar = {
@@ -112,6 +113,32 @@ fun SettingsScreen(
                     checked = useFullScreenNotification,
                     onCheckedChange = { viewModel.saveFullScreenNotification(it) }
                 )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Clear suppression time slider
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Clear suppression time (車列クリア後の通知抑制)", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "If vehicles reappear within ${clearSuppressionSeconds}s after clearing, treat as same convoy (車列がクリアされてから${clearSuppressionSeconds}秒以内に再検知された場合は通知しない)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${clearSuppressionSeconds}s", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                    Slider(
+                        value = clearSuppressionSeconds.toFloat(),
+                        onValueChange = { viewModel.saveClearSuppressionSeconds(it.toInt()) },
+                        valueRange = 0f..60f,
+                        steps = 60,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
