@@ -169,7 +169,6 @@ class RadarNotificationManager(
         }
 
         val notification = builder.build()
-        notification.flags = notification.flags or Notification.FLAG_INSISTENT
 
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
