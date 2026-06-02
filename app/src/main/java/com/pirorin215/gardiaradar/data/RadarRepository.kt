@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.util.Log
 import com.pirorin215.gardiaradar.service.RadarNotificationManager
+import com.pirorin215.gardiaradar.service.RadarScanServiceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,43 +47,33 @@ class RadarRepository(
                 currentNotificationMode = mode
             }
         }
+
+        scope.launch {
+            RadarScanServiceManager.deviceFoundFlow.collectLatest { device ->
+                Log.d(TAG, "Device found from service: ${device.name}")
+                if (_connectionState.value == ConnectionState.Scanning || _connectionState.value == ConnectionState.Disconnected) {
+                    connectToDevice(device)
+                }
+            }
+        }
     }
 
     fun startScan() {
         if (_connectionState.value != ConnectionState.Disconnected) return
         
+        Log.d(TAG, "startScan requested. Signaling RadarScanService.")
         _connectionState.value = ConnectionState.Scanning
-        val scanner = adapter.bluetoothLeScanner ?: return
-        scanner.startScan(scanCallback)
-        
-        // Timeout after 10 seconds and retry
         scope.launch {
-            delay(10000)
-            if (_connectionState.value == ConnectionState.Scanning) {
-                Log.d(TAG, "Scan timed out. Retrying in 5s...")
-                stopScan()
-                _connectionState.value = ConnectionState.Disconnected
-                delay(5000)
-                startScan()
-            }
+            RadarScanServiceManager.emitRestartScan()
         }
     }
 
     private fun stopScan() {
-        adapter.bluetoothLeScanner?.stopScan(scanCallback)
-    }
-
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val deviceName = result.device.name ?: ""
-            if (deviceName.contains("Gardia") || deviceName.contains("R300L")) {
-                stopScan()
-                connectToDevice(result.device)
-            }
-        }
+        // No direct stopScan needed here, service handles it or we just connect
     }
 
     private fun connectToDevice(device: BluetoothDevice) {
+        Log.d(TAG, "Connecting to device: ${device.address}")
         _connectionState.value = ConnectionState.Connecting
         gatt = device.connectGatt(context, false, gattCallback)
     }
@@ -102,7 +93,7 @@ class RadarRepository(
                 // Auto-reconnect logic
                 scope.launch {
                     delay(5000) // Wait 5 seconds before retrying
-                    Log.d(TAG, "Auto-reconnecting...")
+                    Log.d(TAG, "Auto-reconnecting via service...")
                     startScan()
                 }
             }
