@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.WindowManager
@@ -47,6 +48,15 @@ class RadarAlertActivity : ComponentActivity() {
 
         registerReceiver(dismissReceiver, IntentFilter(RadarListenerService.ACTION_DISMISS))
 
+        setupAlertScreen(intent)
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(dismissReceiver)
+        super.onDestroy()
+    }
+
+    private fun setupAlertScreen(intent: Intent?) {
         val jsonData = intent?.getStringExtra(RadarListenerService.EXTRA_ALERT_JSON) ?: "{}"
         val targetCount = parseTargetCount(jsonData)
         val distanceInfo = parseDistanceInfo(jsonData)
@@ -62,9 +72,22 @@ class RadarAlertActivity : ComponentActivity() {
         }
     }
 
-    override fun onDestroy() {
-        unregisterReceiver(dismissReceiver)
-        super.onDestroy()
+    private fun restartVibration() {
+        // 振動を再開
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vm.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
+
+        val vibrationTimings = longArrayOf(0, 500, 200, 500, 200, 500, 200, 500)
+        val vibrationAmplitudes = intArrayOf(0, 255, 0, 255, 0, 255, 0, 255)
+        val vibrationEffect = VibrationEffect.createWaveform(
+            vibrationTimings, vibrationAmplitudes, -1 // 繰り返しなし
+        )
+        vibrator.vibrate(vibrationEffect)
     }
 
     private fun dismissAndStop() {

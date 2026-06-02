@@ -25,11 +25,11 @@ class RadarListenerService : WearableListenerService() {
     private var vibrator: Vibrator? = null
     private var mediaPlayer: MediaPlayer? = null
 
-    // 最大振幅255で繰り返す強力な振動パターン
+    // 最大振幅255で振動（繰り返しなし）
     private val vibrationTimings = longArrayOf(0, 500, 200, 500, 200, 500, 200, 500)
     private val vibrationAmplitudes = intArrayOf(0, 255, 0, 255, 0, 255, 0, 255)
     private val vibrationEffect = VibrationEffect.createWaveform(
-        vibrationTimings, vibrationAmplitudes, 1 // index 1から繰り返し
+        vibrationTimings, vibrationAmplitudes, -1 // 繰り返しなし
     )
 
     override fun onCreate() {
