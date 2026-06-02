@@ -6,17 +6,20 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.util.Log
+import com.pirorin215.gardiaradar.service.RadarNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.*
 
 @SuppressLint("MissingPermission")
 class RadarRepository(
     private val context: Context,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val appSettingsRepository: AppSettingsRepository
 ) {
     private val TAG = "RadarRepository"
     private val TARGET_CHAR_UUID = UUID.fromString("f3641401-00b0-4240-ba50-05ca45bf8abc")
@@ -26,6 +29,9 @@ class RadarRepository(
     private val adapter = bluetoothManager.adapter
     private var gatt: BluetoothGatt? = null
 
+    private val notificationManager = RadarNotificationManager(context)
+    private var currentNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
+
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState = _connectionState.asStateFlow()
 
@@ -34,6 +40,14 @@ class RadarRepository(
 
     private val _rawPacket = MutableStateFlow("")
     val rawPacket = _rawPacket.asStateFlow()
+
+    init {
+        scope.launch {
+            appSettingsRepository.getFlow(Settings.NOTIFICATION_MODE).collectLatest { mode ->
+                currentNotificationMode = mode
+            }
+        }
+    }
 
     fun startScan() {
         if (_connectionState.value != ConnectionState.Disconnected) return
@@ -180,6 +194,7 @@ class RadarRepository(
         }
 
         _targets.value = newTargets
+        notificationManager.handleRadarUpdate(newTargets, currentNotificationMode)
     }
 
     fun disconnect() {

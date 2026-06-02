@@ -12,20 +12,31 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.pirorin215.gardiaradar.ui.screen.MainScreen
+import com.pirorin215.gardiaradar.ui.screen.SettingsScreen
 import com.pirorin215.gardiaradar.ui.theme.BleTemplateTheme
+import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
 import com.pirorin215.gardiaradar.viewModel.RadarViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
     private val radarViewModel: RadarViewModel by viewModel()
+    private val appSettingsViewModel: AppSettingsViewModel by viewModel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {
-            BleTemplateTheme {
+            val themeMode by appSettingsViewModel.themeMode.collectAsState()
+            val isDarkTheme = when(themeMode) {
+                com.pirorin215.gardiaradar.data.ThemeMode.DARK -> true
+                com.pirorin215.gardiaradar.data.ThemeMode.LIGHT -> false
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+
+            BleTemplateTheme(darkTheme = isDarkTheme) {
                 var permissionsGranted by remember { mutableStateOf(false) }
+                var currentScreen by remember { mutableStateOf("main") }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
@@ -41,6 +52,9 @@ class MainActivity : ComponentActivity() {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                         required.add(Manifest.permission.ACCESS_FINE_LOCATION)
                     }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        required.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
                     permissionLauncher.launch(required.toTypedArray())
                 }
 
@@ -48,7 +62,17 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         radarViewModel.startScan()
                     }
-                    MainScreen(viewModel = radarViewModel)
+                    
+                    when(currentScreen) {
+                        "main" -> MainScreen(
+                            viewModel = radarViewModel,
+                            onNavigateToSettings = { currentScreen = "settings" }
+                        )
+                        "settings" -> SettingsScreen(
+                            viewModel = appSettingsViewModel,
+                            onBack = { currentScreen = "main" }
+                        )
+                    }
                 }
             }
         }

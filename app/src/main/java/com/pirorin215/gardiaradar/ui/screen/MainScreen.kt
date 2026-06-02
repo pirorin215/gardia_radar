@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -25,7 +26,10 @@ private val Orange = Color(0xFFFF9100)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: RadarViewModel) {
+fun MainScreen(
+    viewModel: RadarViewModel,
+    onNavigateToSettings: () -> Unit
+) {
     val connectionState by viewModel.connectionState.collectAsState()
     val targets by viewModel.targets.collectAsState()
     val rawPacket by viewModel.rawPacket.collectAsState()
@@ -46,7 +50,12 @@ fun MainScreen(viewModel: RadarViewModel) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = radarColor,
                     titleContentColor = Color.White,
-                )
+                ),
+                actions = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
+                    }
+                }
             )
         }
     ) { innerPadding ->

@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BleTemplate"
+rootProject.name = "GardiaRadar"
 include(":app")

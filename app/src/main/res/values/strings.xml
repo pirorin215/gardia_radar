@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">GardiaRadar</string>
-    <string name="main_screen_title">BLE Template</string>
+    <string name="app_name">Gardia Radar</string>
+    <string name="main_screen_title">Gardia Radar Analyzer</string>
     <string name="no_data_message">no data</string>
     <string name="close_button_text">Close</string>
 
