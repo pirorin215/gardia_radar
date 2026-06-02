@@ -44,25 +44,34 @@ class RadarListenerService : WearableListenerService() {
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        Log.d(TAG, "Message received: path=${messageEvent.path}")
+        Log.d(TAG, "=== Message Received ===")
+        Log.d(TAG, "Path: ${messageEvent.path}")
+        Log.d(TAG, "Data size: ${messageEvent.data.size} bytes")
+        Log.d(TAG, "====================")
 
         when (messageEvent.path) {
             PATH_RADAR_ALERT -> {
                 val jsonData = String(messageEvent.data, Charsets.UTF_8)
+                Log.d(TAG, "Alert data: $jsonData")
                 startAlert(jsonData)
             }
             PATH_RADAR_CLEAR -> {
+                Log.d(TAG, "Clear signal received")
                 stopAlert()
             }
         }
     }
 
     private fun startAlert(jsonData: String) {
+        Log.d(TAG, "Starting alert...")
+
         // 1. 強力な振動開始
         vibrator?.vibrate(vibrationEffect)
+        Log.d(TAG, "Vibration started")
 
         // 2. アラーム音を最大音量でループ再生
         startAlarmSound()
+        Log.d(TAG, "Alarm sound started")
 
         // 3. フルスクリーン警告画面を起動
         val intent = Intent(this, RadarAlertActivity::class.java).apply {
@@ -72,6 +81,7 @@ class RadarListenerService : WearableListenerService() {
             putExtra(EXTRA_ALERT_JSON, jsonData)
         }
         startActivity(intent)
+        Log.d(TAG, "Alert activity started")
     }
 
     private fun startAlarmSound() {
@@ -110,12 +120,16 @@ class RadarListenerService : WearableListenerService() {
     }
 
     fun stopAlert() {
+        Log.d(TAG, "Stopping alert...")
         vibrator?.cancel()
+        Log.d(TAG, "Vibration cancelled")
         stopAlarmSound()
+        Log.d(TAG, "Alarm sound stopped")
 
         // 警告画面を閉じる
         val dismissIntent = Intent(ACTION_DISMISS)
         sendBroadcast(dismissIntent)
+        Log.d(TAG, "Dismiss broadcast sent")
     }
 
     override fun onDestroy() {
