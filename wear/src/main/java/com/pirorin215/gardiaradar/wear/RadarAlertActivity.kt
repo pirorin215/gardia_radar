@@ -1,6 +1,6 @@
 package com.pirorin215.gardiaradar.wear
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -26,7 +26,7 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import org.json.JSONObject
 
-class RadarAlertActivity : Activity() {
+class RadarAlertActivity : ComponentActivity() {
 
     private val dismissReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
