@@ -141,6 +141,55 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 
 ---
 
+## Wear OSアプリのインストール
+
+### ビルド
+
+Wear OSアプリのAPKをビルドします：
+
+```bash
+./gradlew :wear:assembleDebug
+```
+
+APKの場所：
+```
+wear/build/outputs/apk/debug/wear-debug.apk
+```
+
+### Wear OSデバイスで開発者モードを有効化
+
+Wear OSデバイス上で：
+1. 設定 → 关于 → バージョン情報
+2. 「ビルド番号」を7回タップ
+3. 設定に「開発者オプション」が表示されます
+4. 開発者オプション → 「ADBデバッグ」をON
+
+### PCとWear OSデバイスを接続
+
+#### WiFi経由（推奨）
+
+```bash
+# Wear OSデバイスのIPアドレスを確認（設定 → 关于 → ネット情報）
+adb connect 192.168.x.x:5555
+```
+
+#### USB経由
+
+Wear OSデバイスをUSBドックで接続：
+```bash
+adb devices
+```
+
+### APKをインストール
+
+```bash
+adb install -r wear/build/outputs/apk/debug/wear-debug.apk
+```
+
+`-r` オプションは既存のアプリを置換します。
+
+---
+
 ## ライセンス
 
 MIT License
