@@ -19,7 +19,8 @@ import java.util.*
 class RadarRepository(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val appSettingsRepository: AppSettingsRepository
+    private val appSettingsRepository: AppSettingsRepository,
+    private val notificationManager: RadarNotificationManager
 ) {
     private val TAG = "RadarRepository"
     private val TARGET_CHAR_UUID = UUID.fromString("f3641401-00b0-4240-ba50-05ca45bf8abc")
@@ -28,8 +29,6 @@ class RadarRepository(
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter = bluetoothManager.adapter
     private var gatt: BluetoothGatt? = null
-
-    private val notificationManager = RadarNotificationManager(context)
     private var currentNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)

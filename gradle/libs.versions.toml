@@ -12,6 +12,8 @@ composeBom = "2024.09.02"
 materialIconsExtended = "1.6.8"
 datastorePreferences = "1.1.1"
 koin = "3.5.0"
+playServicesWearable = "19.0.0"
+wearCompose = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +39,11 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 # Koin for DI
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
+
+# Wear OS / Wearable
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+androidx-wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "wearCompose" }
+androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

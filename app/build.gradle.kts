@@ -71,6 +71,9 @@ dependencies {
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
 
+    // Wear OS communication
+    implementation(libs.play.services.wearable)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation("io.mockk:mockk:1.13.5")

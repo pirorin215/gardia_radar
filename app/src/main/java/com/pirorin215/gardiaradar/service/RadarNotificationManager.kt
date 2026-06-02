@@ -15,7 +15,10 @@ import com.pirorin215.gardiaradar.R
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.RadarTarget
 
-class RadarNotificationManager(private val context: Context) {
+class RadarNotificationManager(
+    private val context: Context,
+    private val wearMessageSender: WearMessageSender
+) {
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val CHANNEL_ID = "radar_alerts_v6" // v6 for CallStyle
@@ -68,6 +71,7 @@ class RadarNotificationManager(private val context: Context) {
                             "Vehicle Detected!",
                             "Distance: ${targets[0].distance}m"
                         )
+                        wearMessageSender.sendRadarAlert(targets)
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
@@ -77,6 +81,7 @@ class RadarNotificationManager(private val context: Context) {
                             "New Vehicle!",
                             "${targets.size} vehicles approaching"
                         )
+                        wearMessageSender.sendRadarAlert(targets)
                     }
                 }
                 else -> {}
@@ -84,6 +89,7 @@ class RadarNotificationManager(private val context: Context) {
         } else {
             if (lastTargetCount > 0) {
                 notificationManager.cancel(NOTIFICATION_ID)
+                wearMessageSender.sendRadarClear()
             }
         }
 
