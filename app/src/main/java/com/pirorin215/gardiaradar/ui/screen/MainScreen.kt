@@ -149,7 +149,7 @@ fun MainScreen(
                         // 50m間隔の目盛り（200mまで）
                         val scaleMax = 400f // スケーリングの最大値
                         listOf(50, 100, 150, 200).forEach { distance ->
-                            val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
+                            val relativePos = (distance.toFloat() / 200f).coerceIn(0f, 1f)
                             val markDp = (relativePos * scaleMax).dp
 
                             Box(
