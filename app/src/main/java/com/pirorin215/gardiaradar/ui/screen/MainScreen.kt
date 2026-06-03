@@ -146,6 +146,43 @@ fun MainScreen(
                                 .align(Alignment.TopCenter)
                         )
 
+                        // 50m間隔の目盛り
+                        val scaleMax = 400f // スケーリングの最大値
+                        listOf(50, 100, 150).forEach { distance ->
+                            val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
+                            val markDp = (relativePos * scaleMax).dp
+
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = markDp)
+                            ) {
+                                // 目盛り線（縦線から左右に伸びる）
+                                Row(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // 左側の目盛り
+                                    Box(
+                                        modifier = Modifier
+                                            .width(10.dp)
+                                            .height(2.dp)
+                                            .background(Color.White.copy(alpha = 0.4f))
+                                    )
+
+                                    // 中央の縦線（4.dp幅）
+
+                                    // 右側の目盛り
+                                    Box(
+                                        modifier = Modifier
+                                            .width(10.dp)
+                                            .height(2.dp)
+                                            .background(Color.White.copy(alpha = 0.4f))
+                                    )
+                                }
+                            }
+                        }
+
                         // Vehicles (距離順にソートして表示)
                         targets.sortedBy { it.distance }.forEach { target ->
                             // Scale: 0m (Top) to 150m (Bottom)
