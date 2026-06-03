@@ -33,7 +33,10 @@ class WearableDataHost(
 
         dataClient.putDataItem(putDataRequest).apply {
             addOnSuccessListener {
-                Log.d(TAG, "Targets data hosted: ${targets.size} vehicles")
+                // 0台の場合はログを抑止
+                if (targets.size > 0) {
+                    Log.d(TAG, "Targets data hosted: ${targets.size} vehicles")
+                }
             }
             addOnFailureListener { e ->
                 Log.e(TAG, "Failed to host targets data", e)
