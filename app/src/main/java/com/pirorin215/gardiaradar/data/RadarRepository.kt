@@ -65,6 +65,25 @@ class RadarRepository(
                 }
             }
         }
+
+        // 接続状態の変化をWear OSに通知
+        scope.launch {
+            connectionState.collectLatest { state ->
+                when (state) {
+                    ConnectionState.Connected -> {
+                        wearableDataHost.putConnectionStateData(true)
+                        Log.d(TAG, "Connection state change sent to Wear OS: Connected")
+                    }
+                    ConnectionState.Disconnected -> {
+                        wearableDataHost.putConnectionStateData(false)
+                        Log.d(TAG, "Connection state change sent to Wear OS: Disconnected")
+                    }
+                    else -> {
+                        // ScanningやConnectingは通知しない
+                    }
+                }
+            }
+        }
     }
 
     fun startScan() {
@@ -102,6 +121,9 @@ class RadarRepository(
                 _connectionState.value = ConnectionState.Disconnected
                 _targets.value = emptyList()
                 _rawPacket.value = ""
+
+                // Wear OSに空の車列データを送信して古いデータをクリア
+                wearableDataHost.putTargetsData(emptyList())
 
                 // Auto-reconnect logic
                 scope.launch {
@@ -211,5 +233,8 @@ class RadarRepository(
         _connectionState.value = ConnectionState.Disconnected
         _targets.value = emptyList()
         _rawPacket.value = ""
+
+        // Wear OSに空の車列データを送信して古いデータをクリア
+        wearableDataHost.putTargetsData(emptyList())
     }
 }

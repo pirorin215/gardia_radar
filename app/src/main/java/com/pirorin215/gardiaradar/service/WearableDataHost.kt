@@ -40,4 +40,21 @@ class WearableDataHost(
             }
         }
     }
+
+    fun putConnectionStateData(isConnected: Boolean) {
+        val putDataMapRequest = PutDataMapRequest.create("/radar-connection-state")
+        putDataMapRequest.dataMap.putBoolean("isConnected", isConnected)
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Connection state hosted: connected=$isConnected")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host connection state", e)
+            }
+        }
+    }
 }
