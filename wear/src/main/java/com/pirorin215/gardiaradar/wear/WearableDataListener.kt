@@ -23,11 +23,17 @@ class WearableDataListener : WearableListenerService() {
         private const val NOTIFICATION_ID = 1001
     }
 
+    private var lastTargetsUpdateTime = 0L
+
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         dataEvents.forEach { event ->
             if (event.type == DataEvent.TYPE_CHANGED && event.dataItem != null) {
                 val path = event.dataItem.uri.path
                 if (path == "/radar-targets") {
+                    // 1秒以内の重複更新をスキップ（スロットリング）
+                    val now = System.currentTimeMillis()
+                    if (now - lastTargetsUpdateTime < 1000L) return@forEach
+                    lastTargetsUpdateTime = now
                     val dataMap: DataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
                     val targetCount = dataMap.getInt("targetCount", 0)
                     val distancesArrayList = dataMap.getIntegerArrayList("distances")

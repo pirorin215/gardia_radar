@@ -37,7 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
+import androidx.compose.runtime.remember
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -61,6 +63,11 @@ class MainActivity : ComponentActivity() {
                 WearableDataListener.ACTION_CONNECTION_STATE_CHANGED -> {
                     isConnected = intent.getBooleanExtra("isConnected", false)
                 }
+                Intent.ACTION_BATTERY_CHANGED -> {
+                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    batteryLevel = if (level > 0 && scale > 0) (level * 100) / scale else -1
+                }
             }
         }
     }
@@ -70,6 +77,7 @@ class MainActivity : ComponentActivity() {
 
         val filter = IntentFilter(WearableDataListener.ACTION_TARGETS_UPDATED)
         filter.addAction(WearableDataListener.ACTION_CONNECTION_STATE_CHANGED)
+        filter.addAction(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(targetsReceiver, filter)
 
         // 電池残量を取得
@@ -102,20 +110,17 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun MainScreen() {
-        // 時刻と曜日を毎秒更新
+        // 時刻と曜日を1分間隔で更新（分の切り替わりに同期）
+        val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+        val dayFormat = remember { SimpleDateFormat("E", Locale.getDefault()) }
         LaunchedEffect(Unit) {
             while (true) {
-                currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-                currentDayOfWeek = SimpleDateFormat("E", Locale.getDefault()).format(Date())
-                kotlinx.coroutines.delay(1000)
-            }
-        }
-
-        // 電池残量を定期的に更新
-        LaunchedEffect(Unit) {
-            while (true) {
-                updateBatteryLevel()
-                kotlinx.coroutines.delay(60000) // 1分ごとに更新
+                val now = Date()
+                currentTime = timeFormat.format(now)
+                currentDayOfWeek = dayFormat.format(now)
+                // 次の分の00秒まで待つ
+                val seconds = Calendar.getInstance().get(Calendar.SECOND)
+                kotlinx.coroutines.delay((60 - seconds) * 1000L)
             }
         }
 

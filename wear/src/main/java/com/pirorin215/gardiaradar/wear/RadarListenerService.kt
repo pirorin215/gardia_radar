@@ -5,6 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -24,6 +26,8 @@ class RadarListenerService : WearableListenerService() {
 
     private var vibrator: Vibrator? = null
     private var mediaPlayer: MediaPlayer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val alarmTimeoutRunnable = Runnable { stopAlert() }
 
     // 最大振幅255で振動（繰り返しなし）
     private val vibrationTimings = longArrayOf(0, 500, 200, 500, 200, 500, 200, 500)
@@ -73,6 +77,9 @@ class RadarListenerService : WearableListenerService() {
         startAlarmSound()
         Log.d(TAG, "Alarm sound started")
 
+        // 3. 30秒後に自動停止（clear信号が来ない場合の安全装置）
+        handler.postDelayed(alarmTimeoutRunnable, 30000L)
+
         // 3. MainActivityを前面に持ってくる（警告画面は使わない）
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -120,6 +127,7 @@ class RadarListenerService : WearableListenerService() {
 
     fun stopAlert() {
         Log.d(TAG, "Stopping alert...")
+        handler.removeCallbacks(alarmTimeoutRunnable)
         vibrator?.cancel()
         Log.d(TAG, "Vibration cancelled")
         stopAlarmSound()
@@ -132,6 +140,7 @@ class RadarListenerService : WearableListenerService() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(alarmTimeoutRunnable)
         vibrator?.cancel()
         stopAlarmSound()
         super.onDestroy()
