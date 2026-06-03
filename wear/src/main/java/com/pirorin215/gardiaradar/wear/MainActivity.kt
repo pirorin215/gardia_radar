@@ -48,13 +48,19 @@ class MainActivity : ComponentActivity() {
     private var currentTime by mutableStateOf("")
     private var currentDayOfWeek by mutableStateOf("")
     private var batteryLevel by mutableIntStateOf(-1)
+    private var isConnected by mutableStateOf<Boolean?>(null)
 
     private val targetsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == WearableDataListener.ACTION_TARGETS_UPDATED) {
-                targetCount = intent.getIntExtra("targetCount", 0)
-                @Suppress("DEPRECATION")
-                distances = intent.getIntegerArrayListExtra("distances")?.map { it.toInt() } ?: emptyList()
+            when (intent?.action) {
+                WearableDataListener.ACTION_TARGETS_UPDATED -> {
+                    targetCount = intent.getIntExtra("targetCount", 0)
+                    @Suppress("DEPRECATION")
+                    distances = intent.getIntegerArrayListExtra("distances")?.map { it.toInt() } ?: emptyList()
+                }
+                WearableDataListener.ACTION_CONNECTION_STATE_CHANGED -> {
+                    isConnected = intent.getBooleanExtra("isConnected", false)
+                }
             }
         }
     }
@@ -62,10 +68,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 画面を常にオンにする
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        registerReceiver(targetsReceiver, IntentFilter(WearableDataListener.ACTION_TARGETS_UPDATED))
+        val filter = IntentFilter(WearableDataListener.ACTION_TARGETS_UPDATED)
+        filter.addAction(WearableDataListener.ACTION_CONNECTION_STATE_CHANGED)
+        registerReceiver(targetsReceiver, filter)
 
         // 電池残量を取得
         updateBatteryLevel()
@@ -156,6 +161,21 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(8.dp)
+            )
+
+            // 接続状態バー（画面上部）
+            val connectionColor = when (isConnected) {
+                true -> Color(0xFF00C853)   // 緑：接続済み
+                false -> Color(0xFFFF1744)  // 赤：切断
+                null -> Color.Gray           // グレー：不明
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 2.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(connectionColor)
             )
 
             // 自転車アイコン（画面上端）
