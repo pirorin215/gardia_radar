@@ -94,14 +94,18 @@ class RadarRepository(
                 Log.d(TAG, "Connected to GATT server. Requesting MTU...")
                 gatt.requestMtu(512)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.d(TAG, "Disconnected from GATT server. Triggering auto-reconnect...")
+                Log.d(TAG, "Disconnected from GATT server (status=$status). Cleaning up...")
+                // GATTリソースを確実に解放（FastRecMobの安定パターン）
+                gatt.close()
+                this@RadarRepository.gatt = null
+
                 _connectionState.value = ConnectionState.Disconnected
                 _targets.value = emptyList()
                 _rawPacket.value = ""
-                
+
                 // Auto-reconnect logic
                 scope.launch {
-                    delay(5000) // Wait 5 seconds before retrying
+                    delay(1000)
                     Log.d(TAG, "Auto-reconnecting via service...")
                     startScan()
                 }
