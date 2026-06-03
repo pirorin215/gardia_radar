@@ -144,13 +144,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // バッテリー（右上、変更なし）
+            // バッテリー（右中央）
             Text(
                 text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
                 color = Color.White.copy(alpha = 0.7f),
                 fontSize = 18.sp,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.CenterEnd)
                     .padding(8.dp)
             )
 
