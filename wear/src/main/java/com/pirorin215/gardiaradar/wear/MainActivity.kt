@@ -187,8 +187,8 @@ class MainActivity : ComponentActivity() {
 
                     repeat(sortedDistances.size) { index ->
                         val distance = sortedDistances[index]
-                        // 相対位置を計算（距離が小さいほど上に表示）
-                        val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
+                        // 相対位置を計算（距離が小さいほど上に表示、200mまで対応）
+                        val relativePos = (distance.toFloat() / 200f).coerceIn(0f, 1f)
                         // 縦領域を最大化するためスケーリングを調整（100dp相当）
                         val spacingDp = (relativePos * 100f).dp
 

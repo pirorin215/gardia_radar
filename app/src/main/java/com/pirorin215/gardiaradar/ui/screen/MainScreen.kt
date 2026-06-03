@@ -146,9 +146,9 @@ fun MainScreen(
                                 .align(Alignment.TopCenter)
                         )
 
-                        // 50m間隔の目盛り
+                        // 50m間隔の目盛り（200mまで）
                         val scaleMax = 400f // スケーリングの最大値
-                        listOf(50, 100, 150).forEach { distance ->
+                        listOf(50, 100, 150, 200).forEach { distance ->
                             val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
                             val markDp = (relativePos * scaleMax).dp
 
@@ -194,8 +194,8 @@ fun MainScreen(
 
                         // Vehicles (距離順にソートして表示)
                         targets.sortedBy { it.distance }.forEach { target ->
-                            // Scale: 0m (Top) to 150m (Bottom)
-                            val relativePos = (target.distance.toFloat() / 150f).coerceIn(0f, 1f)
+                            // Scale: 0m (Top) to 200m (Bottom)
+                            val relativePos = (target.distance.toFloat() / 200f).coerceIn(0f, 1f)
 
                             // Car Icon
                             val iconColor = if (target.threat >= 2) Color.Red else Color.White
