@@ -1,22 +1,43 @@
 # Gradle files
 .gradle/
 build/
+/*/build/
+
+# Kotlin
+.kotlin/
 
 # Android Studio / IntelliJ files
 .idea/
 *.iml
 *.iws
+*.ipr
+/out/
+.navigation/
 
-# Local configuration
+# Local configuration (API keys, SDK paths, etc.)
 local.properties
+secrets.properties
+
+# Signing files (IMPORTANT: Never commit your keystores)
+*.jks
+*.keystore
+*.p12
+*.pem
+google-services.json
 
 # Android build outputs
 capture/
 *.apk
 *.ap_
+*.aab
 
-# Kotlin files
-.kotlin/
+# Native build (if applicable)
+.externalNativeBuild/
+.cxx/
+/cmake_install.cmake
+/CMakeCache.txt
+/CMakeFiles/
 
 # OS files
 .DS_Store
+Thumbs.db

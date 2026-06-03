@@ -7,6 +7,7 @@ class RadarViewModel(
     private val repository: RadarRepository
 ) : ViewModel() {
     val connectionState = repository.connectionState
+    val connectedDeviceName = repository.connectedDeviceName
     val targets = repository.targets
     val rawPacket = repository.rawPacket
     val radarBatteryLevel = repository.radarBatteryLevel

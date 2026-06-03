@@ -39,6 +39,9 @@ class RadarRepository(
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState = _connectionState.asStateFlow()
 
+    private val _connectedDeviceName = MutableStateFlow<String?>(null)
+    val connectedDeviceName = _connectedDeviceName.asStateFlow()
+
     private val _targets = MutableStateFlow<List<RadarTarget>>(emptyList())
     val targets = _targets.asStateFlow()
 
@@ -67,6 +70,7 @@ class RadarRepository(
             RadarScanServiceManager.deviceFoundFlow.collectLatest { device ->
                 Log.d(TAG, "Device found from service: ${device.name}")
                 if (_connectionState.value == ConnectionState.Scanning || _connectionState.value == ConnectionState.Disconnected) {
+                    _connectedDeviceName.value = device.name
                     connectToDevice(device)
                 }
             }
@@ -108,6 +112,7 @@ class RadarRepository(
         gatt?.close()
         gatt = null
         _connectionState.value = ConnectionState.Disconnected
+        _connectedDeviceName.value = null
         _targets.value = emptyList()
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
@@ -144,6 +149,7 @@ class RadarRepository(
                 this@RadarRepository.gatt = null
 
                 _connectionState.value = ConnectionState.Disconnected
+                _connectedDeviceName.value = null
                 _targets.value = emptyList()
                 _rawPacket.value = ""
                 _radarBatteryLevel.value = -1
@@ -314,6 +320,7 @@ class RadarRepository(
         gatt?.close()
         gatt = null
         _connectionState.value = ConnectionState.Disconnected
+        _connectedDeviceName.value = null
         _targets.value = emptyList()
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1

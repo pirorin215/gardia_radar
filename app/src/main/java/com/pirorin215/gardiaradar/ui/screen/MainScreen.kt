@@ -31,6 +31,7 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
+    val connectedDeviceName by viewModel.connectedDeviceName.collectAsState()
     val targets by viewModel.targets.collectAsState()
     val rawPacket by viewModel.rawPacket.collectAsState()
     val radarBatteryLevel by viewModel.radarBatteryLevel.collectAsState()
@@ -47,7 +48,24 @@ fun MainScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gardia R300L Radar", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Gardia R300L Radar",
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        if (connectionState is ConnectionState.Connected || connectionState is ConnectionState.Connecting) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = connectedDeviceName ?: "",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = radarColor,
                     titleContentColor = Color.White,
@@ -94,7 +112,7 @@ fun MainScreen(
                             else -> "不明"
                         },
                         color = Color.White,
-                        fontSize = 24.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(16.dp))
