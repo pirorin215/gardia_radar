@@ -1,10 +1,8 @@
 package com.pirorin215.gardiaradar.wear
 
 import android.content.Intent
-import android.media.AudioAttributes
 import android.media.AudioManager
-import android.media.MediaPlayer
-import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -94,25 +92,15 @@ class WearableDataListener : WearableListenerService() {
 
         // 音
         try {
-            val soundUri = if (isConnected) {
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            if (isConnected) {
+                // 接続：短く1回ビープ
+                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
             } else {
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                // 切断：2回ビープ
+                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP2, 400)
             }
-
-            MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-                        .build()
-                )
-                setDataSource(this@WearableDataListener, soundUri)
-                setOnCompletionListener { release() }
-                prepare()
-                start()
-            }
+            toneGen.release()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play connection sound", e)
         }
