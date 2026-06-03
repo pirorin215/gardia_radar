@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
     fun MainScreen() {
         // 時刻と曜日を1分間隔で更新（分の切り替わりに同期）
         val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-        val dayFormat = remember { SimpleDateFormat("E", Locale.getDefault()) }
+        val dayFormat = remember { SimpleDateFormat("d E", Locale.getDefault()) }
         LaunchedEffect(Unit) {
             while (true) {
                 val now = Date()
@@ -223,8 +223,7 @@ class MainActivity : ComponentActivity() {
                     Text(
                         text = "📡 $radarBatteryLevel%",
                         color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 27.sp
                     )
                 }
             }

@@ -41,3 +41,7 @@ capture/
 # OS files
 .DS_Store
 Thumbs.db
+
+# AI environment files
+CLAUDE.md
+GEMINI.md

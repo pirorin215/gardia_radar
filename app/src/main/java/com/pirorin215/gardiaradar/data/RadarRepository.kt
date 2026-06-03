@@ -60,7 +60,6 @@ class RadarRepository(
     val suppressionRemainingSeconds = notificationManager.suppressionRemainingSeconds
 
     private var batteryChar: BluetoothGattCharacteristic? = null
-    private var batteryRetryScheduled = false
 
     init {
         scope.launch {
@@ -93,7 +92,6 @@ class RadarRepository(
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
         batteryChar = null
-        batteryRetryScheduled = false
     }
 
     fun connect(device: android.bluetooth.BluetoothDevice) {
@@ -113,7 +111,6 @@ class RadarRepository(
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
         batteryChar = null
-        batteryRetryScheduled = false
         notificationManager.handleBatteryUpdate(-1)
         wearableDataHost.putTargetsData(emptyList())
     }
@@ -206,12 +203,13 @@ class RadarRepository(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "SUCCESS: Notifications enabled on Gardia!")
                 batteryChar?.let { battery ->
+                    // READを実行（接続直後に現在値を取得）
                     if (battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
                         Log.d(TAG, "Reading battery level...")
                         gatt.readCharacteristic(battery)
-                        // batteryCharはonCharacteristicReadで通知有効化後にnullにする
+                        // batteryCharはonCharacteristicReadでクリアする
                     } else {
-                        Log.d(TAG, "Enabling battery level notifications...")
+                        Log.d(TAG, "Enabling battery level notifications (no READ property)...")
                         enableNotifications(gatt, battery)
                         batteryChar = null
                     }
@@ -223,8 +221,6 @@ class RadarRepository(
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
                 val value = characteristic.value
-                val hex = value?.joinToString(" ") { "%02x".format(it) } ?: "null"
-                Log.d(TAG, "onCharacteristicRead (legacy): status=$status, bytes=[$hex] (${value?.size ?: 0} bytes)")
                 if (status == BluetoothGatt.GATT_SUCCESS && value != null) {
                     updateBatteryLevel(value, "read")
                 }
@@ -233,12 +229,8 @@ class RadarRepository(
         }
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
-                val hex = value.joinToString(" ") { "%02x".format(it) }
-                Log.d(TAG, "onCharacteristicRead: status=$status, bytes=[$hex] (${value.size} bytes)")
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    updateBatteryLevel(value, "read")
-                }
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID && status == BluetoothGatt.GATT_SUCCESS) {
+                updateBatteryLevel(value, "read")
                 enableBatteryNotificationIfNeeded(gatt)
             }
         }
@@ -289,39 +281,11 @@ class RadarRepository(
         if (value.isNotEmpty()) {
             val level = value[0].toInt() and 0xFF
             val hex = value.joinToString(" ") { "%02x".format(it) }
-            val allBytes = value.joinToString(", ") { "${it.toInt() and 0xFF} (0x${"%02x".format(it)})" }
-            Log.d(TAG, "Radar battery level: $level% (source=$source, raw=[$hex], ${value.size} bytes, all=[$allBytes])")
-
-            // 初回readで100%が返った場合、キャッシュ値の可能性が高いのでリトライ
-            if (level == 100 && source == "read" && !batteryRetryScheduled) {
-                Log.w(TAG, "Battery 100% from initial read - possibly stale. Scheduling retry in 2s...")
-                batteryRetryScheduled = true
-                scope.launch {
-                    delay(2000)
-                    retryBatteryRead()
-                }
-                return
-            }
-
-            batteryRetryScheduled = false
+            Log.d(TAG, "Radar battery level: $level% (source=$source, raw=[$hex], ${value.size} bytes)")
             _radarBatteryLevel.value = level
             wearableDataHost.putRadarBatteryLevel(level)
             notificationManager.handleBatteryUpdate(level)
         }
-    }
-
-    private fun retryBatteryRead() {
-        gatt?.let { g ->
-            for (service in g.services) {
-                val battery = service.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
-                if (battery != null && battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
-                    Log.d(TAG, "Retrying battery level read...")
-                    g.readCharacteristic(battery)
-                    return
-                }
-            }
-        }
-        Log.w(TAG, "Battery retry: could not find readable battery characteristic")
     }
 
     private fun decodeRadarData(data: ByteArray) {

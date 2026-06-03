@@ -1,0 +1,36 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- アンテナ棒 -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M11,6h2v10h-2z"/>
+    <!-- アンテナ先端 -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M12,2m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0"/>
+    <!-- ベース -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M8,18h8v2h-8z"/>
+    <!-- 電波1（内側） -->
+    <path
+        android:pathData="M15.5,7.5a4.95,4.95 0,0 1,0 5"
+        android:strokeColor="#F44336"
+        android:strokeWidth="1.5"
+        android:fillColor="@null"/>
+    <!-- 電波2（中間） -->
+    <path
+        android:pathData="M17.5,5.5a8.49,8.49 0,0 1,0 9"
+        android:strokeColor="#F44336"
+        android:strokeWidth="1.5"
+        android:fillColor="@null"/>
+    <!-- 電波3（外側） -->
+    <path
+        android:pathData="M19.5,3.5a11.9,11.9 0,0 1,0 13"
+        android:strokeColor="#F44336"
+        android:strokeWidth="1.5"
+        android:fillColor="@null"/>
+</vector>
