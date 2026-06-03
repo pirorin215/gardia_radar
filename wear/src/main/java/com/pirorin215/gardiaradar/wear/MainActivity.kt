@@ -133,12 +133,15 @@ class MainActivity : ComponentActivity() {
                 // 自転車アイコン（最上部）
                 Text("🚴", fontSize = 18.sp)
 
-                repeat(targetCount) { index ->
-                    val distance = distances.getOrElse(index) { 0 }
-                    // Phone側と同じ計算: relativePos = distance / 150
+                // 距離順（近い順）にソートして表示
+                val sortedDistances = distances.sorted()
+
+                repeat(sortedDistances.size) { index ->
+                    val distance = sortedDistances[index]
+                    // 相対位置を計算（距離が小さいほど上に表示）
                     val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
-                    // 縦領域を最大化するためスケーリングを調整（80dp相当）
-                    val spacingDp = (relativePos * 80f).dp
+                    // 縦領域を最大化するためスケーリングを調整（100dp相当）
+                    val spacingDp = (relativePos * 100f).dp
 
                     Spacer(modifier = Modifier.height(spacingDp))
 
