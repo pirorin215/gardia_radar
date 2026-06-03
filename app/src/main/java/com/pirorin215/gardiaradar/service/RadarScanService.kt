@@ -25,6 +25,8 @@ import com.pirorin215.gardiaradar.data.AppSettingsRepository
 import com.pirorin215.gardiaradar.data.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -43,6 +45,10 @@ class RadarScanService : Service() {
 
     private val appSettingsRepository: AppSettingsRepository by inject()
     private var targetDeviceAddress = ""
+
+    private var scanRetryCount = 0
+    private var scanRetryJob: Job? = null
+    private val maxScanRetryDelay = 30_000L // 最大30秒
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -131,6 +137,7 @@ class RadarScanService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "RadarScanService onDestroy")
+        scanRetryJob?.cancel()
         stopBleScan()
         try {
             unregisterReceiver(bluetoothStateReceiver)
@@ -150,6 +157,7 @@ class RadarScanService : Service() {
             return
         }
 
+        scanRetryJob?.cancel()
         stopBleScan()
 
         val filters = if (targetDeviceAddress.isNotEmpty()) {
@@ -165,6 +173,7 @@ class RadarScanService : Service() {
         }
 
         bluetoothAdapter?.bluetoothLeScanner?.startScan(filters, scanSettings, bleScanCallback)
+        scanRetryCount = 0
     }
 
     @SuppressLint("MissingPermission")
@@ -219,6 +228,16 @@ class RadarScanService : Service() {
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             Log.e(TAG, "Scan failed with error code: $errorCode")
+
+            // リトライ（指数バックオフ: 5s, 10s, 20s, 30s, 30s...）
+            val delayMs = minOf(5000L * (1L shl minOf(scanRetryCount, 2)), maxScanRetryDelay)
+            scanRetryCount++
+            Log.w(TAG, "Retrying scan in ${delayMs}ms (attempt $scanRetryCount)")
+            scanRetryJob?.cancel()
+            scanRetryJob = CoroutineScope(Dispatchers.IO).launch {
+                delay(delayMs)
+                startBleScan()
+            }
         }
     }
 
