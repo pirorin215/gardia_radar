@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
                 .background(Color.Black)
         ) {
             // 時刻（左上）
-            androidx.compose.material3.Text(
+            Text(
                 text = currentTime,
                 color = Color.White.copy(alpha = 0.9f),
                 fontSize = 72.sp,
@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
             ) {
-                androidx.compose.material3.Text(
+                Text(
                     text = currentDayOfWeek,
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 48.sp,
@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                androidx.compose.material3.Text(
+                Text(
                     text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 18.sp
@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 // 自転車アイコン（最上部）
-                androidx.compose.material3.Text(
+                Text(
                     "🚴",
                     fontSize = 24.sp,
                     modifier = Modifier.align(Alignment.TopCenter)
@@ -203,7 +203,7 @@ class MainActivity : ComponentActivity() {
 
                             Spacer(modifier = Modifier.width(4.dp))
 
-                            androidx.compose.material3.Text(
+                            Text(
                                 text = "${distance}m",
                                 color = Color.White,
                                 fontSize = 14.sp,
