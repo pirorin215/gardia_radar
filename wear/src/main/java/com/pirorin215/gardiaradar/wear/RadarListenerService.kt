@@ -73,15 +73,14 @@ class RadarListenerService : WearableListenerService() {
         startAlarmSound()
         Log.d(TAG, "Alarm sound started")
 
-        // 3. フルスクリーン警告画面を起動
-        val intent = Intent(this, RadarAlertActivity::class.java).apply {
+        // 3. MainActivityを前面に持ってくる（警告画面は使わない）
+        val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_ALERT_JSON, jsonData)
         }
         startActivity(intent)
-        Log.d(TAG, "Alert activity started")
+        Log.d(TAG, "MainActivity brought to front")
     }
 
     private fun startAlarmSound() {
