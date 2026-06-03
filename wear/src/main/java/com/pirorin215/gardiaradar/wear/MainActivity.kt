@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -25,12 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalDensity
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Text
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.MaterialTheme
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -93,15 +93,6 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun MainScreen() {
-        if (targetCount > 0) {
-            AlertScreen()
-        } else {
-            WaitingScreen()
-        }
-    }
-
-    @Composable
-    fun AlertScreen() {
         // 時刻と曜日を毎秒更新
         LaunchedEffect(Unit) {
             while (true) {
@@ -122,160 +113,102 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
-            contentAlignment = Alignment.TopCenter
+                .background(Color.Black)
         ) {
-            // 車列表示（縦並び、距離に応じた間隔）
-            // Phone側と同じスケール: 0m〜150m → 上〜下
+            // 時刻（左上）
+            androidx.compose.material3.Text(
+                text = currentTime,
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 72.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+            )
+
+            // 曜日とバッテリー（右上）
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top,
-                modifier = Modifier.fillMaxSize()
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
             ) {
+                androidx.compose.material3.Text(
+                    text = currentDayOfWeek,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                androidx.compose.material3.Text(
+                    text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 18.sp
+                )
+            }
+
+            // 中央：レーン表示（常に表示）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 120.dp, bottom = 16.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // 縦線
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(Color.White.copy(alpha = 0.3f))
+                        .align(Alignment.Center)
+                )
+
                 // 自転車アイコン（最上部）
-                Text("🚴", fontSize = 18.sp)
+                androidx.compose.material3.Text(
+                    "🚴",
+                    fontSize = 24.sp,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
 
-                // 距離順（近い順）にソートして表示
-                val sortedDistances = distances.sorted()
+                // 車列表示（車両がある場合のみ）
+                if (targetCount > 0) {
+                    val sortedDistances = distances.sorted()
 
-                repeat(sortedDistances.size) { index ->
-                    val distance = sortedDistances[index]
-                    // 相対位置を計算（距離が小さいほど上に表示）
-                    val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
-                    // 縦領域を最大化するためスケーリングを調整（100dp相当）
-                    val spacingDp = (relativePos * 100f).dp
+                    repeat(sortedDistances.size) { index ->
+                        val distance = sortedDistances[index]
+                        // 相対位置を計算（距離が小さいほど上に表示）
+                        val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
+                        // 縦領域を最大化するためスケーリングを調整（100dp相当）
+                        val spacingDp = (relativePos * 100f).dp
 
-                    Spacer(modifier = Modifier.height(spacingDp))
+                        Spacer(modifier = Modifier.height(spacingDp))
 
-                    // 丸と距離テキストを横並びに配置
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(Color.Red)
-                        )
+                        // 丸と距離テキストを横並びに配置
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Red)
+                            )
 
-                        Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
-                        Text(
-                            text = "${distance}m",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
+                            androidx.compose.material3.Text(
+                                text = "${distance}m",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-            }
-
-            // 時刻と曜日、電池残量を画面下部に表示
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                // 時刻と曜日を横並びに表示
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = currentTime,
-                        color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 24.sp,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = currentDayOfWeek,
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 18.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-
-    @Composable
-    fun WaitingScreen() {
-        // 時刻と曜日を毎秒更新
-        LaunchedEffect(Unit) {
-            while (true) {
-                currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-                currentDayOfWeek = SimpleDateFormat("E", Locale.getDefault()).format(Date())
-                kotlinx.coroutines.delay(1000)
-            }
-        }
-
-        // 電池残量を定期的に更新
-        LaunchedEffect(Unit) {
-            while (true) {
-                updateBatteryLevel()
-                kotlinx.coroutines.delay(60000) // 1分ごとに更新
-            }
-        }
-
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Gardia Radar",
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    fontSize = 16.sp
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Waiting for alerts...",
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                    fontSize = 12.sp
-                )
-            }
-
-            // 時刻と電池残量を画面下部に表示
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                Text(
-                    text = currentTime,
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
