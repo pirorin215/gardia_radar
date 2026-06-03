@@ -29,6 +29,7 @@ Wear OS対応で、ウォッチでも強力な振動と音で警告します。
 
 | 設定 | 説明 | デフォルト |
 |------|------|-----------|
+| **接続先デバイス** | **BLEスキャンで検出したデバイスを選択（GARDIA/R300L）** | **未選択** |
 | Phone Notifications | スマホ通知モード（OFF/FIRST_ONLY/EVERY_TIME） | FIRST_ONLY |
 | Wear OS Notifications | WearOS通知モード（同上） | FIRST_ONLY |
 | Fullscreen notification | ロック画面で全画面通知 | OFF |
@@ -155,11 +156,13 @@ Phone/Wear OSそれぞれで3モードから選択可能：
 ## アーキテクチャ
 
 ### Phoneモジュール
-- **RadarScanService**: フォアグラウンドサービスでBLEスキャンを実行
-- **RadarRepository**: BLE接続・GATT通信・電池取得を管理
+- **RadarConnectionManager**: 接続ライフサイクル管理（再接続・bondedDevices判定・BT監視）
+- **RadarScanService**: フォアグラウンドサービスでBLEスキャンを実行（ScanFilter + ScanSettings最適化）
+- **RadarRepository**: GATT通信・データ処理を管理（純粋なBLE通信層）
 - **RadarNotificationManager**: 車両通知 + 低電池通知を生成
 - **WearableDataHost**: Wear OSへデータアイテム送信
 - **WearMessageSender**: Wear OSへメッセージ送信
+- **BootCompletedReceiver**: 端末起動時にスキャンサービスを自動起動
 
 ### Wearモジュール
 - **MainActivity**: ウォッチ画面（時刻・曜日・電池・接続状態・車列表示）
@@ -171,7 +174,9 @@ Phone/Wear OSそれぞれで3モードから選択可能：
 ## BLE通信仕様
 
 ### 対象デバイス
-- デバイス名に `Gardia` または `R300L` を含む
+- 設定画面でデバイスを選択後、MACアドレスベースのScanFilterでハードウェアフィルタリング
+- 未選択時はデバイス名に `Gardia` または `R300L` を含むものをソフトウェアフィルタで検出
+- ボンデッドデバイスはスキャンなしで直接接続（高速再接続）
 
 ### GATT特性
 
