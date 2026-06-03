@@ -180,13 +180,13 @@ fun MainScreen(
                                             .background(Color.White.copy(alpha = 0.4f))
                                     )
 
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
 
                                     // 距離テキスト
                                     Text(
                                         text = "${distance}m",
                                         color = Color.White.copy(alpha = 0.5f),
-                                        fontSize = 10.sp
+                                        fontSize = 12.sp
                                     )
                                 }
                             }
