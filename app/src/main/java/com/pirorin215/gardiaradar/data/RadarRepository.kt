@@ -2,22 +2,29 @@ package com.pirorin215.gardiaradar.data
 
 import android.annotation.SuppressLint
 import android.bluetooth.*
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.util.Log
 import com.pirorin215.gardiaradar.service.RadarNotificationManager
-import com.pirorin215.gardiaradar.service.RadarScanServiceManager
 import com.pirorin215.gardiaradar.service.WearableDataHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.*
 
+/**
+ * 純粋なGATT通信クラス。
+ * 接続ライフサイクル（再接続・スキャン起動）は RadarConnectionManager が担当。
+ *
+ * 責務:
+ * - BluetoothGattCallback の処理
+ * - connectGatt / discoverServices / MTU要求
+ * - レーダーデータのデコード
+ * - 電池残量の管理
+ * - 通知の有効化/無効化
+ */
 @SuppressLint("MissingPermission")
 class RadarRepository(
     private val context: Context,
@@ -31,11 +38,9 @@ class RadarRepository(
     private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
     private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val adapter = bluetoothManager.adapter
     private var gatt: BluetoothGatt? = null
-    private var phoneNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
-    private var wearNotificationMode: com.pirorin215.gardiaradar.data.NotificationMode = com.pirorin215.gardiaradar.data.NotificationMode.FIRST_ONLY
+    private var phoneNotificationMode: NotificationMode = NotificationMode.FIRST_ONLY
+    private var wearNotificationMode: NotificationMode = NotificationMode.FIRST_ONLY
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState = _connectionState.asStateFlow()
@@ -66,80 +71,35 @@ class RadarRepository(
                 wearNotificationMode = mode
             }
         }
-
-        scope.launch {
-            RadarScanServiceManager.deviceFoundFlow.collectLatest { device ->
-                Log.d(TAG, "Device found from service: ${device.name}")
-                if (_connectionState.value == ConnectionState.Scanning || _connectionState.value == ConnectionState.Disconnected) {
-                    _connectedDeviceName.value = device.name
-                    connectToDevice(device)
-                }
-            }
-        }
-
-        // 接続状態の変化をWear OSに通知
-        scope.launch {
-            connectionState.collectLatest { state ->
-                when (state) {
-                    ConnectionState.Connected -> {
-                        wearableDataHost.putConnectionStateData(true)
-                        Log.d(TAG, "Connection state change sent to Wear OS: Connected")
-                    }
-                    ConnectionState.Disconnected -> {
-                        wearableDataHost.putConnectionStateData(false)
-                        Log.d(TAG, "Connection state change sent to Wear OS: Disconnected")
-                    }
-                    else -> {
-                        // ScanningやConnectingは通知しない
-                    }
-                }
-            }
-        }
-
-        // ターゲットデバイス設定の変更を監視して再接続
-        scope.launch {
-            appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).collectLatest { address ->
-                if (address.isNotEmpty()) {
-                    val state = _connectionState.value
-                    if (state == ConnectionState.Disconnected || state == ConnectionState.Scanning) {
-                        Log.d(TAG, "Target device address changed to '$address'. Starting connection. (state=$state)")
-                        _connectionState.value = ConnectionState.Disconnected
-                        startScan()
-                    }
-                }
-            }
-        }
     }
 
-    fun startScan() {
-        if (_connectionState.value != ConnectionState.Disconnected) return
+    // --- RadarConnectionManager から呼ばれる公開メソッド ---
 
-        Log.d(TAG, "startScan requested.")
-        _connectionState.value = ConnectionState.Scanning
-        scope.launch {
-            val savedAddress = appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).first()
-
-            // ボンデッドデバイスから直接接続を試行（スキャン不要）
-            if (savedAddress.isNotEmpty()) {
-                val bondedTarget = adapter?.bondedDevices?.find { it.address == savedAddress }
-                if (bondedTarget != null) {
-                    Log.d(TAG, "Found bonded device '${bondedTarget.name}' (${bondedTarget.address}). Connecting directly.")
-                    _connectedDeviceName.value = bondedTarget.name
-                    connectToDevice(bondedTarget)
-                    return@launch
-                } else {
-                    Log.d(TAG, "Target device not in bonded devices. Falling back to scan.")
-                }
-            }
-
-            // ボンデッドに無い場合はスキャン
-            Log.d(TAG, "Signaling RadarScanService to start scan.")
-            RadarScanServiceManager.emitRestartScan()
-        }
+    fun setConnectionState(state: ConnectionState) {
+        _connectionState.value = state
     }
 
-    fun forceReconnect() {
-        Log.d(TAG, "forceReconnect requested. Tearing down existing connection.")
+    fun setConnectedDeviceName(name: String?) {
+        _connectedDeviceName.value = name
+    }
+
+    fun resetState() {
+        _connectionState.value = ConnectionState.Disconnected
+        _connectedDeviceName.value = null
+        _targets.value = emptyList()
+        _rawPacket.value = ""
+        _radarBatteryLevel.value = -1
+        batteryChar = null
+    }
+
+    fun connect(device: android.bluetooth.BluetoothDevice) {
+        Log.d(TAG, "Connecting to device: ${device.address}")
+        _connectedDeviceName.value = device.name
+        _connectionState.value = ConnectionState.Connecting
+        gatt = device.connectGatt(context, false, gattCallback)
+    }
+
+    fun disconnect() {
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -149,60 +109,46 @@ class RadarRepository(
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
         batteryChar = null
+        notificationManager.handleBatteryUpdate(-1)
         wearableDataHost.putTargetsData(emptyList())
-
-        // 少し待ってからスキャン開始
-        scope.launch {
-            delay(500)
-            startScan()
-        }
     }
 
-    private fun stopScan() {
-        // No direct stopScan needed here, service handles it or we just connect
+    fun close() {
+        gatt?.close()
+        gatt = null
     }
 
-    private fun connectToDevice(device: BluetoothDevice) {
-        Log.d(TAG, "Connecting to device: ${device.address}")
-        _connectionState.value = ConnectionState.Connecting
-        gatt = device.connectGatt(context, false, gattCallback)
-    }
+    // --- GATT Callback（純粋なGATT通信処理のみ）---
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             Log.d(TAG, "onConnectionStateChange: status=$status, newState=$newState")
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.d(TAG, "Connected to GATT server. Requesting MTU...")
-                gatt.requestMtu(512)
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.d(TAG, "Disconnected from GATT server (status=$status). Cleaning up...")
-                // GATTリソースを確実に解放（FastRecMobの安定パターン）
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    Log.d(TAG, "Connected to GATT server. Requesting MTU...")
+                    gatt.requestMtu(512)
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.d(TAG, "Successfully disconnected from GATT server.")
+                    gatt.close()
+                    this@RadarRepository.gatt = null
+                    _connectionState.value = ConnectionState.Disconnected
+                }
+            } else {
+                Log.e(TAG, "GATT Error: status=$status for ${gatt.device.address}")
                 gatt.close()
                 this@RadarRepository.gatt = null
-
-                _connectionState.value = ConnectionState.Disconnected
-                _connectedDeviceName.value = null
-                _targets.value = emptyList()
-                _rawPacket.value = ""
-                _radarBatteryLevel.value = -1
-                batteryChar = null
-                notificationManager.handleBatteryUpdate(-1)
-
-                // Wear OSに空の車列データを送信して古いデータをクリア
-                wearableDataHost.putTargetsData(emptyList())
-
-                // Auto-reconnect logic
-                scope.launch {
-                    delay(1000)
-                    Log.d(TAG, "Auto-reconnecting via service...")
-                    startScan()
-                }
+                _connectionState.value = ConnectionState.Error("GATT Error $status")
             }
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            Log.d(TAG, "onMtuChanged: mtu=$mtu, status=$status. Discovering services...")
-            gatt.discoverServices()
+            Log.d(TAG, "onMtuChanged: mtu=$mtu, status=$status.")
+            // FastRecMobパターン: discoverServices前に確実に待機
+            scope.launch {
+                delay(600)
+                Log.d(TAG, "Discovering services...")
+                gatt.discoverServices()
+            }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -210,7 +156,6 @@ class RadarRepository(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 var found = false
                 for (service in gatt.services) {
-                    // レーダー特性の探索
                     val characteristic = service.getCharacteristic(TARGET_CHAR_UUID)
                     if (characteristic != null) {
                         Log.d(TAG, "Found Radar Characteristic: ${characteristic.uuid}")
@@ -219,7 +164,6 @@ class RadarRepository(
                         found = true
                     }
 
-                    // 電池残量特性の探索（readはonDescriptorWriteで順次実行）
                     val battery = service.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
                     if (battery != null) {
                         Log.d(TAG, "Found Battery Level Characteristic")
@@ -229,7 +173,6 @@ class RadarRepository(
                 if (!found) {
                     Log.e(TAG, "Radar Characteristic NOT found in any service!")
                 } else {
-                    // 接続優先度を高く設定（低レイテンシ）
                     gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 }
             }
@@ -239,7 +182,6 @@ class RadarRepository(
             Log.d(TAG, "onDescriptorWrite: uuid=${descriptor.uuid}, status=$status")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "SUCCESS: Notifications enabled on Gardia!")
-                // レーダー特性の通知設定完了後、電池残量を読み取り
                 batteryChar?.let { battery ->
                     if (battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
                         Log.d(TAG, "Reading battery level...")
@@ -343,26 +285,7 @@ class RadarRepository(
         }
 
         _targets.value = newTargets
-
-        // Wear OSに車列データを送信
         wearableDataHost.putTargetsData(newTargets)
-
         notificationManager.handleRadarUpdate(newTargets, phoneNotificationMode, wearNotificationMode)
-    }
-
-    fun disconnect() {
-        gatt?.disconnect()
-        gatt?.close()
-        gatt = null
-        _connectionState.value = ConnectionState.Disconnected
-        _connectedDeviceName.value = null
-        _targets.value = emptyList()
-        _rawPacket.value = ""
-        _radarBatteryLevel.value = -1
-        batteryChar = null
-        notificationManager.handleBatteryUpdate(-1)
-
-        // Wear OSに空の車列データを送信して古いデータをクリア
-        wearableDataHost.putTargetsData(emptyList())
     }
 }

@@ -12,4 +12,5 @@ sealed class ConnectionState {
     object Scanning : ConnectionState()
     object Connecting : ConnectionState()
     object Connected : ConnectionState()
+    data class Error(val message: String) : ConnectionState()
 }

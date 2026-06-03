@@ -1,10 +1,12 @@
 package com.pirorin215.gardiaradar.viewModel
 
 import androidx.lifecycle.ViewModel
+import com.pirorin215.gardiaradar.data.ConnectionState
 import com.pirorin215.gardiaradar.data.RadarRepository
 
 class RadarViewModel(
-    private val repository: RadarRepository
+    private val repository: RadarRepository,
+    private val connectionManager: RadarConnectionManager
 ) : ViewModel() {
     val connectionState = repository.connectionState
     val connectedDeviceName = repository.connectedDeviceName
@@ -13,14 +15,14 @@ class RadarViewModel(
     val radarBatteryLevel = repository.radarBatteryLevel
 
     fun startScan() {
-        repository.startScan()
+        connectionManager.startScan()
     }
 
     fun forceReconnect() {
-        repository.forceReconnect()
+        connectionManager.forceReconnect()
     }
 
     fun disconnect() {
-        repository.disconnect()
+        connectionManager.disconnect()
     }
 }

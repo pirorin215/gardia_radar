@@ -6,6 +6,7 @@ import com.pirorin215.gardiaradar.service.RadarNotificationManager
 import com.pirorin215.gardiaradar.service.WearMessageSender
 import com.pirorin215.gardiaradar.service.WearableDataHost
 import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
+import com.pirorin215.gardiaradar.viewModel.RadarConnectionManager
 import com.pirorin215.gardiaradar.viewModel.RadarViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,8 @@ val appModule = module {
     single { WearableDataHost(get()) }
     single { RadarNotificationManager(get(), get(), get()) }
     single { RadarRepository(get(), get(), get(), get(), get()) }
+    single { RadarConnectionManager(get(), get(), get(), get(), get()) }
 
-    viewModel { RadarViewModel(get()) }
+    viewModel { RadarViewModel(get(), get()) }
     viewModel { AppSettingsViewModel(get()) }
 }
