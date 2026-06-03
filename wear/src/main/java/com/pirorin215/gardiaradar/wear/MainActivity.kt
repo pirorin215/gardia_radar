@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Text
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
