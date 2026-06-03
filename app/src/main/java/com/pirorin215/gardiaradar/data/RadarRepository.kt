@@ -27,6 +27,7 @@ class RadarRepository(
 ) {
     private val TAG = "RadarRepository"
     private val TARGET_CHAR_UUID = UUID.fromString("f3641401-00b0-4240-ba50-05ca45bf8abc")
+    private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
     private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -43,6 +44,11 @@ class RadarRepository(
 
     private val _rawPacket = MutableStateFlow("")
     val rawPacket = _rawPacket.asStateFlow()
+
+    private val _radarBatteryLevel = MutableStateFlow(-1)
+    val radarBatteryLevel = _radarBatteryLevel.asStateFlow()
+
+    private var batteryChar: BluetoothGattCharacteristic? = null
 
     init {
         scope.launch {
@@ -88,11 +94,30 @@ class RadarRepository(
 
     fun startScan() {
         if (_connectionState.value != ConnectionState.Disconnected) return
-        
+
         Log.d(TAG, "startScan requested. Signaling RadarScanService.")
         _connectionState.value = ConnectionState.Scanning
         scope.launch {
             RadarScanServiceManager.emitRestartScan()
+        }
+    }
+
+    fun forceReconnect() {
+        Log.d(TAG, "forceReconnect requested. Tearing down existing connection.")
+        gatt?.disconnect()
+        gatt?.close()
+        gatt = null
+        _connectionState.value = ConnectionState.Disconnected
+        _targets.value = emptyList()
+        _rawPacket.value = ""
+        _radarBatteryLevel.value = -1
+        batteryChar = null
+        wearableDataHost.putTargetsData(emptyList())
+
+        // 少し待ってからスキャン開始
+        scope.launch {
+            delay(500)
+            startScan()
         }
     }
 
@@ -121,6 +146,9 @@ class RadarRepository(
                 _connectionState.value = ConnectionState.Disconnected
                 _targets.value = emptyList()
                 _rawPacket.value = ""
+                _radarBatteryLevel.value = -1
+                batteryChar = null
+                notificationManager.handleBatteryUpdate(-1)
 
                 // Wear OSに空の車列データを送信して古いデータをクリア
                 wearableDataHost.putTargetsData(emptyList())
@@ -144,13 +172,20 @@ class RadarRepository(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 var found = false
                 for (service in gatt.services) {
+                    // レーダー特性の探索
                     val characteristic = service.getCharacteristic(TARGET_CHAR_UUID)
                     if (characteristic != null) {
                         Log.d(TAG, "Found Radar Characteristic: ${characteristic.uuid}")
                         enableNotifications(gatt, characteristic)
                         _connectionState.value = ConnectionState.Connected
                         found = true
-                        break
+                    }
+
+                    // 電池残量特性の探索（readはonDescriptorWriteで順次実行）
+                    val battery = service.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
+                    if (battery != null) {
+                        Log.d(TAG, "Found Battery Level Characteristic")
+                        batteryChar = battery
                     }
                 }
                 if (!found) {
@@ -163,20 +198,57 @@ class RadarRepository(
             Log.d(TAG, "onDescriptorWrite: uuid=${descriptor.uuid}, status=$status")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "SUCCESS: Notifications enabled on Gardia!")
+                // レーダー特性の通知設定完了後、電池残量を読み取り
+                batteryChar?.let { battery ->
+                    if (battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
+                        Log.d(TAG, "Reading battery level...")
+                        gatt.readCharacteristic(battery)
+                    } else {
+                        Log.d(TAG, "Enabling battery level notifications...")
+                        enableNotifications(gatt, battery)
+                    }
+                    batteryChar = null
+                }
+            }
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
+                val value = characteristic.value
+                val hex = value?.joinToString(" ") { "%02x".format(it) } ?: "null"
+                Log.d(TAG, "onCharacteristicRead (legacy): status=$status, bytes=[$hex] (${value?.size ?: 0} bytes)")
+                if (status == BluetoothGatt.GATT_SUCCESS && value != null) {
+                    updateBatteryLevel(value, "read")
+                }
+            }
+        }
+
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID) {
+                val hex = value.joinToString(" ") { "%02x".format(it) }
+                Log.d(TAG, "onCharacteristicRead: status=$status, bytes=[$hex] (${value.size} bytes)")
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    updateBatteryLevel(value, "read")
+                }
             }
         }
 
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             val value = characteristic.value
-            if (characteristic.uuid == TARGET_CHAR_UUID && value != null) {
-                decodeRadarData(value)
+            if (value != null) {
+                when (characteristic.uuid) {
+                    TARGET_CHAR_UUID -> decodeRadarData(value)
+                    BATTERY_LEVEL_CHAR_UUID -> updateBatteryLevel(value, "notification")
+                }
             }
         }
-        
+
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-            if (characteristic.uuid == TARGET_CHAR_UUID) {
-                decodeRadarData(value)
+            when (characteristic.uuid) {
+                TARGET_CHAR_UUID -> decodeRadarData(value)
+                BATTERY_LEVEL_CHAR_UUID -> updateBatteryLevel(value, "notification")
             }
         }
     }
@@ -187,6 +259,17 @@ class RadarRepository(
         if (descriptor != null) {
             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             gatt.writeDescriptor(descriptor)
+        }
+    }
+
+    private fun updateBatteryLevel(value: ByteArray, source: String) {
+        if (value.isNotEmpty()) {
+            val level = value[0].toInt() and 0xFF
+            val hex = value.joinToString(" ") { "%02x".format(it) }
+            Log.d(TAG, "Radar battery level: $level% (source=$source, raw=[$hex], ${value.size} bytes)")
+            _radarBatteryLevel.value = level
+            wearableDataHost.putRadarBatteryLevel(level)
+            notificationManager.handleBatteryUpdate(level)
         }
     }
 
@@ -233,6 +316,9 @@ class RadarRepository(
         _connectionState.value = ConnectionState.Disconnected
         _targets.value = emptyList()
         _rawPacket.value = ""
+        _radarBatteryLevel.value = -1
+        batteryChar = null
+        notificationManager.handleBatteryUpdate(-1)
 
         // Wear OSに空の車列データを送信して古いデータをクリア
         wearableDataHost.putTargetsData(emptyList())

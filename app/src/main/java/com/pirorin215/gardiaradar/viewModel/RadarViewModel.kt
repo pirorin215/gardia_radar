@@ -9,9 +9,14 @@ class RadarViewModel(
     val connectionState = repository.connectionState
     val targets = repository.targets
     val rawPacket = repository.rawPacket
+    val radarBatteryLevel = repository.radarBatteryLevel
 
     fun startScan() {
         repository.startScan()
+    }
+
+    fun forceReconnect() {
+        repository.forceReconnect()
     }
 
     fun disconnect() {

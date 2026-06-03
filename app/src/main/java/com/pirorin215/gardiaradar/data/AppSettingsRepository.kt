@@ -56,6 +56,11 @@ object Settings {
         preferencesKey = intPreferencesKey("clear_suppression_seconds"),
         defaultValue = 10
     )
+
+    val RADAR_LOW_BATTERY_THRESHOLD = SettingKey.Direct(
+        preferencesKey = intPreferencesKey("radar_low_battery_threshold"),
+        defaultValue = 20
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {

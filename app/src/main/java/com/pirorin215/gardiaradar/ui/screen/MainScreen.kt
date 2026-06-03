@@ -33,6 +33,7 @@ fun MainScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val targets by viewModel.targets.collectAsState()
     val rawPacket by viewModel.rawPacket.collectAsState()
+    val radarBatteryLevel by viewModel.radarBatteryLevel.collectAsState()
 
     // Determine overall threat level for background color
     val maxThreat = targets.maxOfOrNull { it.threat } ?: 0
@@ -82,22 +83,43 @@ fun MainScreen(
                         is ConnectionState.Disconnected -> Color(0xFFFF1744)
                         else -> Orange
                     }
-                    Box(modifier = Modifier.size(8.dp).background(statusColor, shape = androidx.compose.foundation.shape.CircleShape))
+                    Box(modifier = Modifier.size(12.dp).background(statusColor, shape = androidx.compose.foundation.shape.CircleShape))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = connectionState.javaClass.simpleName,
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp
+                        text = when (connectionState) {
+                            is ConnectionState.Connected -> "接続済"
+                            is ConnectionState.Disconnected -> "切断"
+                            is ConnectionState.Scanning -> "スキャン中"
+                            is ConnectionState.Connecting -> "接続中"
+                            else -> "不明"
+                        },
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Button(
-                        onClick = { viewModel.startScan() },
+                        onClick = { viewModel.forceReconnect() },
+                        enabled = connectionState !is ConnectionState.Scanning && connectionState !is ConnectionState.Connecting,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         modifier = Modifier.height(32.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White.copy(alpha = 0.2f),
+                            disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                        )
                     ) {
-                        Text("RECONNECT / SCAN", fontSize = 10.sp, color = Color.White)
+                        Text("再接続", fontSize = 16.sp, color = Color.White)
                     }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // レーダー電池残量（常に表示）
+                    Text(
+                        text = "🔋 ${if (radarBatteryLevel >= 0) "$radarBatteryLevel%" else "--%"}",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

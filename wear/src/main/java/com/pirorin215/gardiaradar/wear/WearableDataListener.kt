@@ -3,6 +3,7 @@ package com.pirorin215.gardiaradar.wear
 import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -19,6 +20,7 @@ class WearableDataListener : WearableListenerService() {
         private const val TAG = "WearableDataListener"
         const val ACTION_TARGETS_UPDATED = "com.pirorin215.gardiaradar.wear.ACTION_TARGETS_UPDATED"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.pirorin215.gardiaradar.wear.ACTION_CONNECTION_STATE_CHANGED"
+        const val ACTION_RADAR_BATTERY = "com.pirorin215.gardiaradar.wear.ACTION_RADAR_BATTERY"
     }
 
     private var lastTargetsUpdateTime = 0L
@@ -55,8 +57,19 @@ class WearableDataListener : WearableListenerService() {
                     }
                     sendBroadcast(intent)
 
-                    // 接続/切断を音と振動で通知
+                    // 接続/切断を音と振動で通知し、アプリを前面に
                     playConnectionFeedback(isConnected)
+                    bringMainActivityToFront()
+                } else if (path == "/radar-battery") {
+                    val dataMap: DataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    val level = dataMap.getInt("level", -1)
+
+                    Log.d(TAG, "Radar battery level received: $level%")
+
+                    val intent = Intent(ACTION_RADAR_BATTERY).apply {
+                        putExtra("level", level)
+                    }
+                    sendBroadcast(intent)
                 }
             }
         }
@@ -103,6 +116,29 @@ class WearableDataListener : WearableListenerService() {
             toneGen.release()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play connection sound", e)
+        }
+    }
+
+    private fun bringMainActivityToFront() {
+        try {
+            // 画面を起こす（WakeLock）
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "GardiaRadar:ConnectionWake"
+            )
+            wakeLock.acquire(3000L) // 3秒で自動解放
+
+            // Activityを前面に
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+            Log.d(TAG, "MainActivity brought to front with WakeLock")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to bring MainActivity to front", e)
         }
     }
 }

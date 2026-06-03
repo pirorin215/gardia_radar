@@ -6,6 +6,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.Wearable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -51,6 +56,13 @@ class MainActivity : ComponentActivity() {
     private var currentDayOfWeek by mutableStateOf("")
     private var batteryLevel by mutableIntStateOf(-1)
     private var isConnected by mutableStateOf<Boolean?>(null)
+    private var radarBatteryLevel by mutableIntStateOf(-1)
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val finishOnDisconnectRunnable = Runnable {
+        Log.d("MainActivity", "Auto-finishing after disconnect timeout")
+        finish()
+    }
 
     private val targetsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -62,11 +74,15 @@ class MainActivity : ComponentActivity() {
                 }
                 WearableDataListener.ACTION_CONNECTION_STATE_CHANGED -> {
                     isConnected = intent.getBooleanExtra("isConnected", false)
+                    handleConnectionStateChange(isConnected)
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
                     val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
                     batteryLevel = if (level > 0 && scale > 0) (level * 100) / scale else -1
+                }
+                WearableDataListener.ACTION_RADAR_BATTERY -> {
+                    radarBatteryLevel = intent.getIntExtra("level", -1)
                 }
             }
         }
@@ -77,11 +93,15 @@ class MainActivity : ComponentActivity() {
 
         val filter = IntentFilter(WearableDataListener.ACTION_TARGETS_UPDATED)
         filter.addAction(WearableDataListener.ACTION_CONNECTION_STATE_CHANGED)
+        filter.addAction(WearableDataListener.ACTION_RADAR_BATTERY)
         filter.addAction(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(targetsReceiver, filter)
 
         // 電池残量を取得
         updateBatteryLevel()
+
+        // 接続状態とレーダー電池の初期値をDataClientから読み取る
+        readInitialState()
 
         setContent {
             MaterialTheme {
@@ -103,8 +123,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun readInitialState() {
+        val dataClient = Wearable.getDataClient(this)
+        dataClient.dataItems.addOnSuccessListener { dataItems ->
+            for (item in dataItems) {
+                when (item.uri.path) {
+                    "/radar-connection-state" -> {
+                        val dataMap = DataMapItem.fromDataItem(item).dataMap
+                        isConnected = dataMap.getBoolean("isConnected", false)
+                        handleConnectionStateChange(isConnected)
+                    }
+                    "/radar-battery" -> {
+                        val dataMap = DataMapItem.fromDataItem(item).dataMap
+                        radarBatteryLevel = dataMap.getInt("level", -1)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleConnectionStateChange(connected: Boolean?) {
+        handler.removeCallbacks(finishOnDisconnectRunnable)
+        if (connected == false) {
+            // 切断時は10秒後にアプリを終了してウォッチフェイスに戻る
+            handler.postDelayed(finishOnDisconnectRunnable, 10000L)
+        }
+        // 接続時(connected == true) または不明(null) の場合は何もしない（前面に留まる）
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(finishOnDisconnectRunnable)
         unregisterReceiver(targetsReceiver)
     }
 
@@ -159,14 +208,26 @@ class MainActivity : ComponentActivity() {
             }
 
             // バッテリー（右中央）
-            Text(
-                text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 27.sp,
+            Column(
+                horizontalAlignment = Alignment.End,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(8.dp)
-            )
+                    .padding(end = 8.dp)
+            ) {
+                Text(
+                    text = if (batteryLevel >= 0) "⌚ $batteryLevel%" else "⚡",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 27.sp
+                )
+                if (radarBatteryLevel >= 0) {
+                    Text(
+                        text = "📡 $radarBatteryLevel%",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
             // 接続状態バー（画面上部）
             val connectionColor = when (isConnected) {
@@ -177,9 +238,9 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 2.dp)
-                    .width(40.dp)
-                    .height(4.dp)
+                    .padding(top = 0.dp)
+                    .width(200.dp)
+                    .height(30.dp)
                     .background(connectionColor)
             )
 

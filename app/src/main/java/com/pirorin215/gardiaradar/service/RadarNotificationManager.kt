@@ -32,8 +32,11 @@ class RadarNotificationManager(
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val CHANNEL_ID = "radar_alerts_v7"
+    private val LOW_BATTERY_CHANNEL_ID = "radar_low_battery"
     val NOTIFICATION_ID = 1001
+    private val LOW_BATTERY_NOTIFICATION_ID = 1002
     private var lastTargetCount = 0
+    private var lowBatteryNotified = false
     private var lastClearTimestamp: Long = 0
 
     // 定期通知用
@@ -46,6 +49,7 @@ class RadarNotificationManager(
 
     init {
         createNotificationChannel()
+        createLowBatteryChannel()
     }
 
     private fun createNotificationChannel() {
@@ -64,6 +68,20 @@ class RadarNotificationManager(
                 enableVibration(true)
                 vibrationPattern = VIBRATION_PATTERN
                 setSound(null, audioAttributes)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createLowBatteryChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Radar Low Battery"
+            val descriptionText = "Low battery alerts for radar device"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+
+            val channel = NotificationChannel(LOW_BATTERY_CHANNEL_ID, name, importance).apply {
+                description = descriptionText
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(channel)
@@ -287,5 +305,56 @@ class RadarNotificationManager(
         periodicNotificationJob?.cancel()
         periodicNotificationJob = null
         Log.d(TAG, "Periodic notification stopped")
+    }
+
+    fun handleBatteryUpdate(level: Int) {
+        if (level < 0) {
+            // 不明な場合は通知をクリア
+            if (lowBatteryNotified) {
+                notificationManager.cancel(LOW_BATTERY_NOTIFICATION_ID)
+                lowBatteryNotified = false
+            }
+            return
+        }
+
+        val threshold = runBlocking {
+            appSettingsRepository.getFlow(Settings.RADAR_LOW_BATTERY_THRESHOLD).first()
+        }
+
+        if (level < threshold) {
+            if (!lowBatteryNotified) {
+                Log.d(TAG, "Low battery notification: level=$level%, threshold=$threshold%")
+                sendLowBatteryNotification(level, threshold)
+                lowBatteryNotified = true
+            }
+        } else {
+            if (lowBatteryNotified) {
+                Log.d(TAG, "Battery recovered: level=$level%, threshold=$threshold%")
+                notificationManager.cancel(LOW_BATTERY_NOTIFICATION_ID)
+                lowBatteryNotified = false
+            }
+        }
+    }
+
+    private fun sendLowBatteryNotification(level: Int, threshold: Int) {
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context, 0, contentIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, LOW_BATTERY_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("レーダー電池残量低下")
+            .setContentText("Gardia R300L: ${level}% (しきい値: ${threshold}%)")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentPendingIntent)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+
+        notificationManager.notify(LOW_BATTERY_NOTIFICATION_ID, notification)
     }
 }

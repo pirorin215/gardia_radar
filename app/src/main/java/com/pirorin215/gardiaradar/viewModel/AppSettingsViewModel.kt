@@ -30,6 +30,9 @@ class AppSettingsViewModel(
     val clearSuppressionSeconds: StateFlow<Int> = repository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 10)
 
+    val radarLowBatteryThreshold: StateFlow<Int> = repository.getFlow(Settings.RADAR_LOW_BATTERY_THRESHOLD)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -48,5 +51,9 @@ class AppSettingsViewModel(
 
     fun saveClearSuppressionSeconds(seconds: Int) {
         viewModelScope.launch { repository.setValue(Settings.CLEAR_SUPPRESSION_SECONDS, seconds) }
+    }
+
+    fun saveRadarLowBatteryThreshold(value: Int) {
+        viewModelScope.launch { repository.setValue(Settings.RADAR_LOW_BATTERY_THRESHOLD, value) }
     }
 }

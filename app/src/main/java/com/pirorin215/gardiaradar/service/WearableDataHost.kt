@@ -60,4 +60,21 @@ class WearableDataHost(
             }
         }
     }
+
+    fun putRadarBatteryLevel(level: Int) {
+        val putDataMapRequest = PutDataMapRequest.create("/radar-battery")
+        putDataMapRequest.dataMap.putInt("level", level)
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Radar battery level hosted: $level%")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host radar battery level", e)
+            }
+        }
+    }
 }

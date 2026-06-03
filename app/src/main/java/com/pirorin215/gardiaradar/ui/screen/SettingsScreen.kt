@@ -28,6 +28,7 @@ fun SettingsScreen(
     val wearNotificationMode by viewModel.wearNotificationMode.collectAsState()
     val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
     val clearSuppressionSeconds by viewModel.clearSuppressionSeconds.collectAsState()
+    val radarLowBatteryThreshold by viewModel.radarLowBatteryThreshold.collectAsState()
 
     Scaffold(
         topBar = {
@@ -136,6 +137,33 @@ fun SettingsScreen(
                         onValueChange = { viewModel.saveClearSuppressionSeconds(it.toInt()) },
                         valueRange = 0f..60f,
                         steps = 60,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- Radar Low Battery Threshold ---
+            Text("Radar Low Battery Threshold", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "レーダー電池残量がしきい値を下回ったら通知します",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${radarLowBatteryThreshold}%", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                    Slider(
+                        value = radarLowBatteryThreshold.toFloat(),
+                        onValueChange = { viewModel.saveRadarLowBatteryThreshold(it.toInt()) },
+                        valueRange = 0f..100f,
+                        steps = 100,
                         modifier = Modifier.weight(1f)
                     )
                 }
