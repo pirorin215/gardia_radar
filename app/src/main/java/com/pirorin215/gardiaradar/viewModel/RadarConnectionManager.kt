@@ -15,6 +15,7 @@ import com.pirorin215.gardiaradar.data.Settings
 import com.pirorin215.gardiaradar.service.RadarScanServiceManager
 import com.pirorin215.gardiaradar.service.WearableDataHost
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -52,6 +53,7 @@ class RadarConnectionManager(
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
+    private var reconnectJob: Job? = null
 
     // Bluetooth ON/OFF監視
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
@@ -65,7 +67,8 @@ class RadarConnectionManager(
                     }
                     BluetoothAdapter.STATE_ON -> {
                         Log.d(TAG, "Bluetooth ON - attempting reconnection")
-                        scope.launch {
+                        reconnectJob?.cancel()
+                        reconnectJob = scope.launch {
                             delay(1000L)
                             restartScan(forceScan = true)
                         }
@@ -94,7 +97,8 @@ class RadarConnectionManager(
                         // エラー時はリソースを解放してから再スキャン
                         repository.disconnect()
                         repository.close()
-                        scope.launch {
+                        reconnectJob?.cancel()
+                        reconnectJob = scope.launch {
                             delay(ERROR_RECONNECT_DELAY_MS)
                             Log.d(TAG, "Reconnecting after error: ${state.message}")
                             restartScan(forceScan = true)
@@ -175,7 +179,9 @@ class RadarConnectionManager(
             repository.close()
         }
 
-        scope.launch {
+        // 既存の再接続処理をキャンセルして重複防止
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
             delay(FORCE_RECONNECT_DELAY_MS)
             repository.resetState()
             restartScan(forceScan = true)

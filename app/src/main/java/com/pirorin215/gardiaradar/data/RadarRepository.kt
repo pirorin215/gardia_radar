@@ -209,11 +209,12 @@ class RadarRepository(
                     if (battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
                         Log.d(TAG, "Reading battery level...")
                         gatt.readCharacteristic(battery)
+                        // batteryCharはonCharacteristicReadで通知有効化後にnullにする
                     } else {
                         Log.d(TAG, "Enabling battery level notifications...")
                         enableNotifications(gatt, battery)
+                        batteryChar = null
                     }
-                    batteryChar = null
                 }
             }
         }
@@ -227,6 +228,7 @@ class RadarRepository(
                 if (status == BluetoothGatt.GATT_SUCCESS && value != null) {
                     updateBatteryLevel(value, "read")
                 }
+                enableBatteryNotificationIfNeeded(gatt)
             }
         }
 
@@ -237,6 +239,7 @@ class RadarRepository(
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     updateBatteryLevel(value, "read")
                 }
+                enableBatteryNotificationIfNeeded(gatt)
             }
         }
 
@@ -265,6 +268,20 @@ class RadarRepository(
         if (descriptor != null) {
             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             gatt.writeDescriptor(descriptor)
+        }
+    }
+
+    /**
+     * 初回READ完了後、バッテリー通知も有効化する。
+     * これによりREAD値とNOTIFY値を比較でき、キャッシュ値の検出が可能になる。
+     */
+    private fun enableBatteryNotificationIfNeeded(gatt: BluetoothGatt) {
+        batteryChar?.let { battery ->
+            if (battery.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
+                Log.d(TAG, "Enabling battery level notifications after read...")
+                enableNotifications(gatt, battery)
+            }
+            batteryChar = null
         }
     }
 

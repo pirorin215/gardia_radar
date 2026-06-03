@@ -49,6 +49,8 @@ class RadarScanService : Service() {
     private var scanRetryCount = 0
     private var scanRetryJob: Job? = null
     private val maxScanRetryDelay = 30_000L // 最大30秒
+    private var lastScanStartTime = 0L
+    private val MIN_SCAN_INTERVAL_MS = 6000L // Android制限(30秒間5回)に対する安全マージン
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -157,6 +159,26 @@ class RadarScanService : Service() {
             return
         }
 
+        // スキャン開始間隔の制限（Androidの "scanning too frequently" を回避）
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastScanStartTime
+        if (elapsed < MIN_SCAN_INTERVAL_MS) {
+            val waitMs = MIN_SCAN_INTERVAL_MS - elapsed
+            Log.w(TAG, "Scan throttled - waiting ${waitMs}ms (min interval=${MIN_SCAN_INTERVAL_MS}ms)")
+            scanRetryJob?.cancel()
+            scanRetryJob = CoroutineScope(Dispatchers.IO).launch {
+                delay(waitMs)
+                doStartBleScan()
+            }
+            return
+        }
+
+        doStartBleScan()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun doStartBleScan() {
+        lastScanStartTime = System.currentTimeMillis()
         scanRetryJob?.cancel()
         stopBleScan()
 
