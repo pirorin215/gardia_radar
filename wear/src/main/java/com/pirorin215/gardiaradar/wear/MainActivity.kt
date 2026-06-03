@@ -132,14 +132,16 @@ class MainActivity : ComponentActivity() {
                         text = currentTime,
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
                     )
 
                     Text(
                         text = currentDayOfWeek,
                         color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
