@@ -104,7 +104,7 @@ fun MainScreen(
 
                 // Vehicle List (Left side)
                 Box(modifier = Modifier.fillMaxSize()) {
-                    Column(modifier = Modifier.fillMaxWidth(0.7f)) {
+                    Column(modifier = Modifier.fillMaxWidth(0.6f)) {
                         Text(
                             text = "TARGETS: ${targets.size}",
                             color = Color.White,
@@ -123,7 +123,7 @@ fun MainScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .fillMaxWidth(0.25f)
+                            .fillMaxWidth(0.3f)
                             .align(Alignment.CenterEnd)
                             .padding(vertical = 32.dp)
                     ) {
@@ -157,7 +157,7 @@ fun MainScreen(
                                     .align(Alignment.TopCenter)
                                     .padding(top = markDp)
                             ) {
-                                // 目盛り線（縦線から左右に伸びる）
+                                // 目盛り線（縦線に揃えて左右に伸びる）
                                 Row(
                                     modifier = Modifier.align(Alignment.Center),
                                     verticalAlignment = Alignment.CenterVertically
@@ -169,9 +169,8 @@ fun MainScreen(
                                             .height(2.dp)
                                             .background(Color.White.copy(alpha = 0.4f))
                                     )
-
-                                    // 中央の縦線（4.dp幅）
-
+                                    // 縦線の幅分のスペース
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     // 右側の目盛り
                                     Box(
                                         modifier = Modifier
@@ -179,16 +178,14 @@ fun MainScreen(
                                             .height(2.dp)
                                             .background(Color.White.copy(alpha = 0.4f))
                                     )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    // 距離テキスト
-                                    Text(
-                                        text = "${distance}m",
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontSize = 12.sp
-                                    )
                                 }
+                                // 距離テキスト（目盛りの右横）
+                                Text(
+                                    text = "${distance}m",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 16.sp,
+                                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 70.dp)
+                                )
                             }
                         }
 

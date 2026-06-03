@@ -127,7 +127,9 @@ class MainActivity : ComponentActivity() {
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = currentTime,
                         color = Color.White.copy(alpha = 0.9f),
@@ -150,7 +152,7 @@ class MainActivity : ComponentActivity() {
             Text(
                 text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = 18.sp,
+                fontSize = 27.sp,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(8.dp)
@@ -169,8 +171,7 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 40.dp, bottom = 16.dp),
-                contentAlignment = Alignment.TopCenter
+                    .padding(top = 40.dp, bottom = 16.dp)
             ) {
                 // 縦線
                 Box(
@@ -181,24 +182,34 @@ class MainActivity : ComponentActivity() {
                         .align(Alignment.Center)
                 )
 
+                // メモリ線（50, 100, 150, 200m）
+                listOf(50, 100, 150, 200).forEach { distance ->
+                    val relativePos = (distance.toFloat() / 200f).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = (relativePos * 150f).dp)
+                            .width(12.dp)
+                            .height(2.dp)
+                            .background(Color.White.copy(alpha = 0.3f))
+                    )
+                }
+
                 // 車列表示（車両がある場合のみ）
                 if (targetCount > 0) {
                     val sortedDistances = distances.sorted()
 
-                    repeat(sortedDistances.size) { index ->
-                        val distance = sortedDistances[index]
-                        // 相対位置を計算（距離が小さいほど上に表示、200mまで対応）
+                    sortedDistances.forEach { distance ->
                         val relativePos = (distance.toFloat() / 200f).coerceIn(0f, 1f)
-                        // 縦領域を最大化するためスケーリングを調整（150dp相当）
-                        val spacingDp = (relativePos * 150f).dp
+                        val positionDp = (relativePos * 150f).dp
 
-                        Spacer(modifier = Modifier.height(spacingDp))
-
-                        // 丸と距離テキストを横並びに配置
+                        // 距離に応じた絶対位置に配置
                         Row(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.align(Alignment.Center)
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = positionDp)
                         ) {
                             Box(
                                 modifier = Modifier
