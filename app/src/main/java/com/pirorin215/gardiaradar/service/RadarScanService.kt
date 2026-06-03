@@ -8,6 +8,7 @@ import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
@@ -20,9 +21,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pirorin215.gardiaradar.MainActivity
 import com.pirorin215.gardiaradar.R
+import com.pirorin215.gardiaradar.data.AppSettingsRepository
+import com.pirorin215.gardiaradar.data.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 
 class RadarScanService : Service() {
 
@@ -35,6 +40,9 @@ class RadarScanService : Service() {
 
     private lateinit var bluetoothManager: BluetoothManager
     private var bluetoothAdapter: BluetoothAdapter? = null
+
+    private val appSettingsRepository: AppSettingsRepository by inject()
+    private var targetDeviceAddress = ""
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -70,6 +78,20 @@ class RadarScanService : Service() {
         val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         registerReceiver(bluetoothStateReceiver, filter)
 
+        // Subscribe to target device address changes
+        CoroutineScope(Dispatchers.IO).launch {
+            appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).collect { address ->
+                if (targetDeviceAddress != address) {
+                    targetDeviceAddress = address
+                    Log.d(TAG, "Target device address updated to: $address")
+                    // アドレスが新しく設定されたらスキャンを再開
+                    if (address.isNotEmpty()) {
+                        startBleScan()
+                    }
+                }
+            }
+        }
+
         // Subscribe to restart scan events
         CoroutineScope(Dispatchers.IO).launch {
             RadarScanServiceManager.restartScanFlow.collect {
@@ -96,7 +118,12 @@ class RadarScanService : Service() {
         }
 
         startForeground(NOTIFICATION_ID, buildNotification().build())
-        startBleScan()
+
+        // Load the latest target device address before starting scan
+        CoroutineScope(Dispatchers.IO).launch {
+            targetDeviceAddress = appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).first()
+            startBleScan()
+        }
 
         return START_STICKY
     }
@@ -125,8 +152,19 @@ class RadarScanService : Service() {
 
         stopBleScan()
 
-        Log.d(TAG, "Starting BLE scan in service...")
-        bluetoothAdapter?.bluetoothLeScanner?.startScan(null, scanSettings, bleScanCallback)
+        val filters = if (targetDeviceAddress.isNotEmpty()) {
+            Log.d(TAG, "Starting BLE scan with hardware filter for address: $targetDeviceAddress")
+            listOf(
+                ScanFilter.Builder()
+                    .setDeviceAddress(targetDeviceAddress)
+                    .build()
+            )
+        } else {
+            Log.d(TAG, "Starting BLE scan without hardware filter (no target device address saved)")
+            null
+        }
+
+        bluetoothAdapter?.bluetoothLeScanner?.startScan(filters, scanSettings, bleScanCallback)
     }
 
     @SuppressLint("MissingPermission")
@@ -139,11 +177,41 @@ class RadarScanService : Service() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             super.onScanResult(callbackType, result)
             val deviceName = result.device.name ?: ""
-            if (deviceName.contains("Gardia") || deviceName.contains("R300L")) {
-                Log.d(TAG, "Target device '$deviceName' found! Signaling connect.")
+
+            // ハードウェアScanFilterが設定されている場合は直接採用
+            // 未設定の場合はソフトウェアフィルタで判定
+            val isTarget = if (targetDeviceAddress.isNotEmpty()) {
+                result.device.address == targetDeviceAddress
+            } else {
+                deviceName.contains("Gardia", ignoreCase = true) || deviceName.contains("R300L", ignoreCase = true)
+            }
+
+            if (isTarget) {
+                Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found! Signaling connect.")
                 stopBleScan()
                 CoroutineScope(Dispatchers.IO).launch {
                     RadarScanServiceManager.emitDeviceFound(result.device)
+                }
+            }
+        }
+
+        override fun onBatchScanResults(results: List<ScanResult>) {
+            super.onBatchScanResults(results)
+            Log.d(TAG, "onBatchScanResults: ${results.size} devices found.")
+            results.forEach { result ->
+                val deviceName = result.device.name ?: ""
+                val isTarget = if (targetDeviceAddress.isNotEmpty()) {
+                    result.device.address == targetDeviceAddress
+                } else {
+                    deviceName.contains("Gardia", ignoreCase = true) || deviceName.contains("R300L", ignoreCase = true)
+                }
+                if (isTarget) {
+                    Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found in batch!")
+                    stopBleScan()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        RadarScanServiceManager.emitDeviceFound(result.device)
+                    }
+                    return
                 }
             }
         }

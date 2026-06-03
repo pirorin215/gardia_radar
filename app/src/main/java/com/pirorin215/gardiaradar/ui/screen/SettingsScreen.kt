@@ -29,6 +29,8 @@ fun SettingsScreen(
     val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
     val clearSuppressionSeconds by viewModel.clearSuppressionSeconds.collectAsState()
     val radarLowBatteryThreshold by viewModel.radarLowBatteryThreshold.collectAsState()
+    val targetDeviceAddress by viewModel.targetDeviceAddress.collectAsState()
+    val targetDeviceName by viewModel.targetDeviceName.collectAsState()
 
     Scaffold(
         topBar = {
@@ -48,6 +50,20 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            // --- Device Selection ---
+            DeviceSelectionSection(
+                currentDeviceName = targetDeviceName,
+                currentDeviceAddress = targetDeviceAddress,
+                onSelectDevice = { address, name ->
+                    viewModel.saveTargetDevice(address, name)
+                },
+                onClearDevice = {
+                    viewModel.clearTargetDevice()
+                }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
             // --- Phone Notifications ---
             Text("Phone Notifications", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))

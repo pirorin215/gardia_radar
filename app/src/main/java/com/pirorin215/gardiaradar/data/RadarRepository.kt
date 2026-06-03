@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.*
 
@@ -94,14 +95,45 @@ class RadarRepository(
                 }
             }
         }
+
+        // ターゲットデバイス設定の変更を監視して再接続
+        scope.launch {
+            appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).collectLatest { address ->
+                if (address.isNotEmpty()) {
+                    val state = _connectionState.value
+                    if (state == ConnectionState.Disconnected || state == ConnectionState.Scanning) {
+                        Log.d(TAG, "Target device address changed to '$address'. Starting connection. (state=$state)")
+                        _connectionState.value = ConnectionState.Disconnected
+                        startScan()
+                    }
+                }
+            }
+        }
     }
 
     fun startScan() {
         if (_connectionState.value != ConnectionState.Disconnected) return
 
-        Log.d(TAG, "startScan requested. Signaling RadarScanService.")
+        Log.d(TAG, "startScan requested.")
         _connectionState.value = ConnectionState.Scanning
         scope.launch {
+            val savedAddress = appSettingsRepository.getFlow(Settings.TARGET_DEVICE_ADDRESS).first()
+
+            // ボンデッドデバイスから直接接続を試行（スキャン不要）
+            if (savedAddress.isNotEmpty()) {
+                val bondedTarget = adapter?.bondedDevices?.find { it.address == savedAddress }
+                if (bondedTarget != null) {
+                    Log.d(TAG, "Found bonded device '${bondedTarget.name}' (${bondedTarget.address}). Connecting directly.")
+                    _connectedDeviceName.value = bondedTarget.name
+                    connectToDevice(bondedTarget)
+                    return@launch
+                } else {
+                    Log.d(TAG, "Target device not in bonded devices. Falling back to scan.")
+                }
+            }
+
+            // ボンデッドに無い場合はスキャン
+            Log.d(TAG, "Signaling RadarScanService to start scan.")
             RadarScanServiceManager.emitRestartScan()
         }
     }
@@ -196,6 +228,9 @@ class RadarRepository(
                 }
                 if (!found) {
                     Log.e(TAG, "Radar Characteristic NOT found in any service!")
+                } else {
+                    // 接続優先度を高く設定（低レイテンシ）
+                    gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 }
             }
         }

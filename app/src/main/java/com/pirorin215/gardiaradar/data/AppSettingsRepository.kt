@@ -61,6 +61,16 @@ object Settings {
         preferencesKey = intPreferencesKey("radar_low_battery_threshold"),
         defaultValue = 20
     )
+
+    val TARGET_DEVICE_ADDRESS = SettingKey.Direct(
+        preferencesKey = stringPreferencesKey("target_device_address"),
+        defaultValue = ""
+    )
+
+    val TARGET_DEVICE_NAME = SettingKey.Direct(
+        preferencesKey = stringPreferencesKey("target_device_name"),
+        defaultValue = ""
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {

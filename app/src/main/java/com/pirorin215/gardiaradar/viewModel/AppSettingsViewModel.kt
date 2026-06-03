@@ -33,6 +33,12 @@ class AppSettingsViewModel(
     val radarLowBatteryThreshold: StateFlow<Int> = repository.getFlow(Settings.RADAR_LOW_BATTERY_THRESHOLD)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
+    val targetDeviceAddress: StateFlow<String> = repository.getFlow(Settings.TARGET_DEVICE_ADDRESS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val targetDeviceName: StateFlow<String> = repository.getFlow(Settings.TARGET_DEVICE_NAME)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -55,5 +61,19 @@ class AppSettingsViewModel(
 
     fun saveRadarLowBatteryThreshold(value: Int) {
         viewModelScope.launch { repository.setValue(Settings.RADAR_LOW_BATTERY_THRESHOLD, value) }
+    }
+
+    fun saveTargetDevice(address: String, name: String) {
+        viewModelScope.launch {
+            repository.setValue(Settings.TARGET_DEVICE_ADDRESS, address)
+            repository.setValue(Settings.TARGET_DEVICE_NAME, name)
+        }
+    }
+
+    fun clearTargetDevice() {
+        viewModelScope.launch {
+            repository.setValue(Settings.TARGET_DEVICE_ADDRESS, "")
+            repository.setValue(Settings.TARGET_DEVICE_NAME, "")
+        }
     }
 }
