@@ -113,7 +113,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(targets) { target ->
+                            items(targets.sortedBy { it.distance }) { target ->
                                 TargetMiniCard(target)
                             }
                         }
@@ -146,14 +146,14 @@ fun MainScreen(
                                 .align(Alignment.TopCenter)
                         )
 
-                        // Vehicles
-                        targets.forEach { target ->
+                        // Vehicles (距離順にソートして表示)
+                        targets.sortedBy { it.distance }.forEach { target ->
                             // Scale: 0m (Top) to 150m (Bottom)
                             val relativePos = (target.distance.toFloat() / 150f).coerceIn(0f, 1f)
-                            
+
                             // Car Icon
                             val iconColor = if (target.threat >= 2) Color.Red else Color.White
-                            
+
                             // Visual placement based on distance
                             Box(
                                 modifier = Modifier
@@ -162,16 +162,32 @@ fun MainScreen(
                             ) {
                                 // Spacer
                             }
-                            
-                            Icon(
-                                imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = "Car",
-                                tint = iconColor,
+
+                            // Row for distance text and car icon
+                            Row(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .padding(top = (relativePos * 400).dp) // Adjust 400 for screen height
-                                    .size(24.dp)
-                            )
+                                    .padding(top = (relativePos * 400).dp), // Adjust 400 for screen height
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                // Distance text (left of icon)
+                                Text(
+                                    text = "${target.distance}",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(modifier = Modifier.width(2.dp))
+
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsCar,
+                                    contentDescription = "Car",
+                                    tint = iconColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }
