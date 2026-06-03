@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -244,46 +245,39 @@ fun MainScreen(
                         }
 
                         // Vehicles (距離順にソートして表示)
-                        targets.sortedBy { it.distance }.forEach { target ->
+                        targets.sortedBy { it.distance }.forEachIndexed { index, target ->
                             // Scale: 0m (Top) to 200m (Bottom)
                             val relativePos = (target.distance.toFloat() / 200f).coerceIn(0f, 1f)
 
                             // Car Icon
                             val iconColor = if (target.threat >= 2) Color.Red else Color.White
 
-                            // Visual placement based on distance
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(relativePos)
-                            ) {
-                                // Spacer
-                            }
+                            key(index, target.id) {
+                                // Row for distance text and car icon
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(top = (relativePos * 500).dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    // Distance text (left of icon)
+                                    Text(
+                                        text = "${target.distance}",
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
 
-                            // Row for distance text and car icon
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = (relativePos * 500).dp), // スケーリング調整（500で画面全体を有効活用）
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                // Distance text (left of icon)
-                                Text(
-                                    text = "${target.distance}",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                    Spacer(modifier = Modifier.width(2.dp))
 
-                                Spacer(modifier = Modifier.width(2.dp))
-
-                                Icon(
-                                    imageVector = Icons.Default.DirectionsCar,
-                                    contentDescription = "Car",
-                                    tint = iconColor,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                    Icon(
+                                        imageVector = Icons.Default.DirectionsCar,
+                                        contentDescription = "Car",
+                                        tint = iconColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
                     }
