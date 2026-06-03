@@ -14,6 +14,7 @@ datastorePreferences = "1.1.1"
 koin = "3.5.0"
 playServicesWearable = "19.0.0"
 wearCompose = "1.4.1"
+watchfaceComplications = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -44,6 +45,7 @@ koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compos
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
 androidx-wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "wearCompose" }
 androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
+androidx-wear-watchface-complications-data-source = { group = "androidx.wear.watchface", name = "watchface-complications-data-source", version.ref = "watchfaceComplications" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

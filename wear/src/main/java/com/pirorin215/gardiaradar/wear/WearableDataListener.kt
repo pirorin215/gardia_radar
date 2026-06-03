@@ -1,5 +1,6 @@
 package com.pirorin215.gardiaradar.wear
 
+import android.content.ComponentName
 import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -8,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMap
@@ -21,6 +23,8 @@ class WearableDataListener : WearableListenerService() {
         const val ACTION_TARGETS_UPDATED = "com.pirorin215.gardiaradar.wear.ACTION_TARGETS_UPDATED"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.pirorin215.gardiaradar.wear.ACTION_CONNECTION_STATE_CHANGED"
         const val ACTION_RADAR_BATTERY = "com.pirorin215.gardiaradar.wear.ACTION_RADAR_BATTERY"
+        const val PREFS_NAME = "radar_prefs"
+        const val PREF_KEY_CONNECTED = "isConnected"
     }
 
     private var lastTargetsUpdateTime = 0L
@@ -52,10 +56,18 @@ class WearableDataListener : WearableListenerService() {
 
                     Log.d(TAG, "Connection state received: connected=$isConnected")
 
+                    // SharedPreferencesに接続状態をキャッシュ
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                        .putBoolean(PREF_KEY_CONNECTED, isConnected)
+                        .apply()
+
                     val intent = Intent(ACTION_CONNECTION_STATE_CHANGED).apply {
                         putExtra("isConnected", isConnected)
                     }
                     sendBroadcast(intent)
+
+                    // コンプリケーションを更新
+                    updateComplications()
 
                     // 接続/切断を音と振動で通知し、アプリを前面に
                     playConnectionFeedback(isConnected)
@@ -139,6 +151,19 @@ class WearableDataListener : WearableListenerService() {
             Log.d(TAG, "MainActivity brought to front with WakeLock")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to bring MainActivity to front", e)
+        }
+    }
+
+    private fun updateComplications() {
+        try {
+            val requester = ComplicationDataSourceUpdateRequester.create(
+                this,
+                ComponentName(this, RadarComplicationService::class.java)
+            )
+            requester.requestUpdateAll()
+            Log.d(TAG, "Complication update requested")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to request complication update", e)
         }
     }
 }

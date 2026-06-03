@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.play.services.wearable)
     implementation(libs.androidx.wear.compose.material)
     implementation(libs.androidx.wear.compose.foundation)
+    implementation(libs.androidx.wear.watchface.complications.data.source)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

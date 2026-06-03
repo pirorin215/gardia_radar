@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- アンテナ棒 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11,6h2v10h-2z"/>
+    <!-- アンテナ先端 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0"/>
+    <!-- ベース -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8,18h8v2h-8z"/>
+    <!-- 斜め線（切断表示） -->
+    <path
+        android:fillColor="@null"
+        android:pathData="M4,4L20,20"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"/>
+</vector>
