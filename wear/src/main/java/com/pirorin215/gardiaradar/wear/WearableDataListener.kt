@@ -1,12 +1,14 @@
 package com.pirorin215.gardiaradar.wear
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Intent
-import android.os.Build
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMap
@@ -19,8 +21,6 @@ class WearableDataListener : WearableListenerService() {
         private const val TAG = "WearableDataListener"
         const val ACTION_TARGETS_UPDATED = "com.pirorin215.gardiaradar.wear.ACTION_TARGETS_UPDATED"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.pirorin215.gardiaradar.wear.ACTION_CONNECTION_STATE_CHANGED"
-        private const val CHANNEL_ID = "radar_connection"
-        private const val NOTIFICATION_ID = 1001
     }
 
     private var lastTargetsUpdateTime = 0L
@@ -57,42 +57,64 @@ class WearableDataListener : WearableListenerService() {
                     }
                     sendBroadcast(intent)
 
-                    // 接続/切断通知を表示
-                    showConnectionNotification(isConnected)
+                    // 接続/切断を音と振動で通知
+                    playConnectionFeedback(isConnected)
                 }
             }
         }
     }
 
-    private fun showConnectionNotification(isConnected: Boolean) {
-        // 通知チャンネルの作成（Android 8.0以降）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Radar Connection",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Notifications for radar connection status"
-            }
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+    private fun playConnectionFeedback(isConnected: Boolean) {
+        // 振動
+        val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vm.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
         }
 
-        val title = if (isConnected) "Gardia Radar" else "Gardia Radar"
-        val message = if (isConnected) "🔗 レーダーに接続しました" else "🔌 レーダーが切断されました"
+        if (isConnected) {
+            // 接続：短く2回振動
+            val effect = VibrationEffect.createWaveform(
+                longArrayOf(0, 100, 100, 100),
+                intArrayOf(0, 200, 0, 200),
+                -1
+            )
+            vibrator?.vibrate(effect)
+        } else {
+            // 切断：長めに1回振動
+            val effect = VibrationEffect.createWaveform(
+                longArrayOf(0, 300),
+                intArrayOf(0, 255),
+                -1
+            )
+            vibrator?.vibrate(effect)
+        }
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
-
+        // 音
         try {
-            NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Failed to show notification: ${e.message}")
+            val soundUri = if (isConnected) {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            }
+
+            MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .build()
+                )
+                setDataSource(this@WearableDataListener, soundUri)
+                setOnCompletionListener { release() }
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play connection sound", e)
         }
     }
 }
