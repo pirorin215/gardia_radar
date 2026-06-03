@@ -18,6 +18,8 @@ import com.pirorin215.gardiaradar.data.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -25,6 +27,7 @@ import android.util.Log
 
 class RadarNotificationManager(
     private val context: Context,
+    private val scope: CoroutineScope,
     private val wearMessageSender: WearMessageSender,
     private val appSettingsRepository: AppSettingsRepository
 ) {
@@ -38,6 +41,11 @@ class RadarNotificationManager(
     private var lastTargetCount = 0
     private var lowBatteryNotified = false
     private var lastClearTimestamp: Long = 0
+
+    // クールダウンタイマー用
+    private val _suppressionRemainingSeconds = MutableStateFlow(0)
+    val suppressionRemainingSeconds = _suppressionRemainingSeconds.asStateFlow()
+    private var suppressionCountdownJob: Job? = null
 
     // 定期通知用
     private val notificationScope = CoroutineScope(Job())
@@ -92,11 +100,12 @@ class RadarNotificationManager(
         val currentCount = targets.size
         currentTargets = targets // 現在のターゲットを保持
 
-        // 車両がクリアされたときにタイムスタンプを記録
+        // 車両がクリアされたときにタイムスタンプを記録＆カウントダウン開始
         if (currentCount == 0 && lastTargetCount > 0) {
             lastClearTimestamp = System.currentTimeMillis()
             if (lastClearTimestamp > 0) {
                 Log.d(TAG, "Vehicles cleared. Suppression period started.")
+                startSuppressionCountdown()
             }
         }
 
@@ -115,6 +124,9 @@ class RadarNotificationManager(
                 Log.d(TAG, "==================")
                 lastTargetCount = currentCount
                 return // 通知しない
+            } else {
+                // 抑制期間を過ぎたのでカウントダウンをリセット
+                stopSuppressionCountdown()
             }
         }
 
@@ -142,6 +154,10 @@ class RadarNotificationManager(
         processNotifications(targets, phoneMode, wearMode, currentCount, true)
 
         lastTargetCount = currentCount
+        // 通常通知時はカウントダウン停止（抑制期間外の車両検知）
+        if (currentCount > 0) {
+            stopSuppressionCountdown()
+        }
         Log.d(TAG, "==================")
     }
 
@@ -305,6 +321,24 @@ class RadarNotificationManager(
         periodicNotificationJob?.cancel()
         periodicNotificationJob = null
         Log.d(TAG, "Periodic notification stopped")
+    }
+
+    private fun startSuppressionCountdown() {
+        stopSuppressionCountdown()
+        suppressionCountdownJob = notificationScope.launch {
+            val suppressionSeconds = appSettingsRepository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS).first()
+            for (i in suppressionSeconds downTo 1) {
+                _suppressionRemainingSeconds.value = i
+                delay(1000)
+            }
+            _suppressionRemainingSeconds.value = 0
+        }
+    }
+
+    private fun stopSuppressionCountdown() {
+        suppressionCountdownJob?.cancel()
+        suppressionCountdownJob = null
+        _suppressionRemainingSeconds.value = 0
     }
 
     fun handleBatteryUpdate(level: Int) {

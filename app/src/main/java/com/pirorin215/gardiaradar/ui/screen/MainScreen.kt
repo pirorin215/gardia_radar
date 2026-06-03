@@ -35,6 +35,7 @@ fun MainScreen(
     val targets by viewModel.targets.collectAsState()
     val rawPacket by viewModel.rawPacket.collectAsState()
     val radarBatteryLevel by viewModel.radarBatteryLevel.collectAsState()
+    val suppressionRemaining by viewModel.suppressionRemainingSeconds.collectAsState()
 
     // Determine overall threat level for background color
     val maxThreat = targets.maxOfOrNull { it.threat } ?: 0
@@ -145,12 +146,25 @@ fun MainScreen(
                 // Vehicle List (Left side)
                 Box(modifier = Modifier.fillMaxSize()) {
                     Column(modifier = Modifier.fillMaxWidth(0.6f)) {
-                        Text(
-                            text = "TARGETS: ${targets.size}",
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "車数: ${targets.size}",
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            if (suppressionRemaining > 0) {
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = "CDTimer: ${suppressionRemaining}s",
+                                    color = Orange,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(targets.sortedBy { it.distance }) { target ->

@@ -19,7 +19,7 @@ val appModule = module {
     single { AppSettingsRepository(get()) }
     single { WearMessageSender(get(), get()) }
     single { WearableDataHost(get()) }
-    single { RadarNotificationManager(get(), get(), get()) }
+    single { RadarNotificationManager(get(), get(), get(), get()) }
     single { RadarRepository(get(), get(), get(), get(), get()) }
     single { RadarConnectionManager(get(), get(), get(), get(), get()) }
 

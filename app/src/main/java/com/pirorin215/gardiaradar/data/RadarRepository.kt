@@ -57,6 +57,8 @@ class RadarRepository(
     private val _radarBatteryLevel = MutableStateFlow(-1)
     val radarBatteryLevel = _radarBatteryLevel.asStateFlow()
 
+    val suppressionRemainingSeconds = notificationManager.suppressionRemainingSeconds
+
     private var batteryChar: BluetoothGattCharacteristic? = null
 
     init {
