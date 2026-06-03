@@ -11,16 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,12 +33,15 @@ import androidx.wear.compose.material.Text
 
 class MainActivity : ComponentActivity() {
 
-    private var targetCount by mutableIntStateOf(0)
+    private var targetCount by mutableStateOf(0)
+    private var distances by mutableStateOf(emptyList<Int>())
 
     private val targetsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == WearableDataListener.ACTION_TARGETS_UPDATED) {
                 targetCount = intent.getIntExtra("targetCount", 0)
+                @Suppress("DEPRECATION")
+                distances = intent.getIntegerArrayListExtra("distances")?.map { it.toInt() } ?: emptyList()
             }
         }
     }
@@ -76,7 +77,7 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFB71C1C)), // 暗赤背景
+                .background(Color(0xFFB71C1C)),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -93,12 +94,24 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 車列表示（縦並び）
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
+                // 車列表示（縦並び、距離に応じた間隔）
+                // Phone側と同じスケール: 0m〜150m → 上〜下
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top
                 ) {
-                    repeat(targetCount) {
+                    // 自転車アイコン（最上部）
+                    Text("🚴", fontSize = 16.sp)
+
+                    repeat(targetCount) { index ->
+                        val distance = distances.getOrElse(index) { 0 }
+                        // Phone側と同じ計算: relativePos = distance / 150
+                        val relativePos = (distance.toFloat() / 150f).coerceIn(0f, 1f)
+                        // Wear OSの画面に合わせて高さをスケーリング（120dp相当）
+                        val spacingDp = (relativePos * 30f).dp
+
+                        Spacer(modifier = Modifier.height(spacingDp))
+
                         Box(
                             modifier = Modifier
                                 .size(12.dp)

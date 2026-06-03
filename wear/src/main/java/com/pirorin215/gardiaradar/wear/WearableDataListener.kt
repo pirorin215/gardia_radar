@@ -22,11 +22,14 @@ class WearableDataListener : WearableListenerService() {
                 if (path == "/radar-targets") {
                     val dataMap: DataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
                     val targetCount = dataMap.getInt("targetCount", 0)
+                    val distancesArrayList = dataMap.getIntegerArrayList("distances")
+                    val distances = distancesArrayList?.map { it.toInt() } ?: emptyList()
 
-                    Log.d(TAG, "Targets received: count=$targetCount")
+                    Log.d(TAG, "Targets received: count=$targetCount, distances=$distances")
 
                     val intent = Intent(ACTION_TARGETS_UPDATED).apply {
                         putExtra("targetCount", targetCount)
+                        putIntegerArrayListExtra("distances", java.util.ArrayList(distances))
                     }
                     sendBroadcast(intent)
                 }
