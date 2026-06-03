@@ -119,45 +119,55 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // 時刻（左上）
-            Text(
-                text = currentTime,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 72.sp,
-                fontWeight = FontWeight.Bold,
+            // 時刻と曜日（左端、縦中央）
+            Row(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-            )
+                    .align(Alignment.CenterStart)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = currentTime,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
-            // 曜日とバッテリー（右上）
-            Column(
-                horizontalAlignment = Alignment.End,
+                    Text(
+                        text = currentDayOfWeek,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // バッテリー（右上、変更なし）
+            Text(
+                text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 18.sp,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
-            ) {
-                Text(
-                    text = currentDayOfWeek,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            )
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = if (batteryLevel >= 0) "🔋 $batteryLevel%" else "⚡",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 18.sp
-                )
-            }
+            // 自転車アイコン（画面上端）
+            Text(
+                "🚴",
+                fontSize = 24.sp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+            )
 
             // 中央：レーン表示（常に表示）
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 120.dp, bottom = 16.dp),
+                    .padding(top = 40.dp, bottom = 16.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 // 縦線
@@ -167,13 +177,6 @@ class MainActivity : ComponentActivity() {
                         .fillMaxHeight()
                         .background(Color.White.copy(alpha = 0.3f))
                         .align(Alignment.Center)
-                )
-
-                // 自転車アイコン（最上部）
-                Text(
-                    "🚴",
-                    fontSize = 24.sp,
-                    modifier = Modifier.align(Alignment.TopCenter)
                 )
 
                 // 車列表示（車両がある場合のみ）
