@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private var targetCount by mutableStateOf(0)
     private var distances by mutableStateOf(emptyList<Int>())
     private var currentTime by mutableStateOf("")
+    private var currentDayOfWeek by mutableStateOf("")
     private var batteryLevel by mutableIntStateOf(-1)
 
     private val targetsReceiver = object : BroadcastReceiver() {
@@ -101,10 +102,11 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AlertScreen() {
-        // 時刻を毎秒更新
+        // 時刻と曜日を毎秒更新
         LaunchedEffect(Unit) {
             while (true) {
-                currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                currentDayOfWeek = SimpleDateFormat("E", Locale.getDefault()).format(Date())
                 kotlinx.coroutines.delay(1000)
             }
         }
@@ -169,18 +171,33 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 時刻と電池残量を画面下部に表示
+            // 時刻と曜日、電池残量を画面下部に表示
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                Text(
-                    text = currentTime,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
+                // 時刻と曜日を横並びに表示
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = currentTime,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 24.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = currentDayOfWeek,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -196,10 +213,11 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun WaitingScreen() {
-        // 時刻を毎秒更新
+        // 時刻と曜日を毎秒更新
         LaunchedEffect(Unit) {
             while (true) {
-                currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                currentDayOfWeek = SimpleDateFormat("E", Locale.getDefault()).format(Date())
                 kotlinx.coroutines.delay(1000)
             }
         }
