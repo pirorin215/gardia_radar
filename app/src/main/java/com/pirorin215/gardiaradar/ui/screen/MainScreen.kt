@@ -179,6 +179,15 @@ fun MainScreen(
                                             .height(2.dp)
                                             .background(Color.White.copy(alpha = 0.4f))
                                     )
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    // 距離テキスト
+                                    Text(
+                                        text = "${distance}m",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 10.sp
+                                    )
                                 }
                             }
                         }
