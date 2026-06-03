@@ -147,7 +147,7 @@ fun MainScreen(
                         )
 
                         // 50m間隔の目盛り（200mまで）
-                        val scaleMax = 400f // スケーリングの最大値
+                        val scaleMax = 500f // スケーリングの最大値（画面全体を有効活用）
                         listOf(50, 100, 150, 200).forEach { distance ->
                             val relativePos = (distance.toFloat() / 200f).coerceIn(0f, 1f)
                             val markDp = (relativePos * scaleMax).dp
@@ -213,7 +213,7 @@ fun MainScreen(
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .padding(top = (relativePos * 400).dp), // Adjust 400 for screen height
+                                    .padding(top = (relativePos * 500).dp), // スケーリング調整（500で画面全体を有効活用）
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
