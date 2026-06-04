@@ -80,14 +80,21 @@ class RadarListenerService : WearableListenerService() {
         // 3. 30秒後に自動停止（clear信号が来ない場合の安全装置）
         handler.postDelayed(alarmTimeoutRunnable, 30000L)
 
-        // 3. MainActivityを前面に持ってくる（警告画面は使わない）
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+        // 4. 省電力モードでなければMainActivityを前面に持ってくる
+        val powerSaving = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(WearableDataListener.PREF_KEY_POWER_SAVING, false)
+
+        if (!powerSaving) {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+            Log.d(TAG, "MainActivity brought to front")
+        } else {
+            Log.d(TAG, "省電力モードが有効 - MainActivityの起動をスキップ")
         }
-        startActivity(intent)
-        Log.d(TAG, "MainActivity brought to front")
     }
 
     private fun startAlarmSound() {

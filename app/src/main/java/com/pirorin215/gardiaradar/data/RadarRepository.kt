@@ -3,6 +3,9 @@ package com.pirorin215.gardiaradar.data
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.util.Log
 import com.pirorin215.gardiaradar.service.RadarNotificationManager
 import com.pirorin215.gardiaradar.service.WearableDataHost
@@ -11,7 +14,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import java.util.*
 
 /**
@@ -24,6 +29,7 @@ import java.util.*
  * - レーダーデータのデコード
  * - 電池残量の管理
  * - 通知の有効化/無効化
+ * - 通信セッションの記録（ON/OFF両方）
  */
 @SuppressLint("MissingPermission")
 class RadarRepository(
@@ -31,7 +37,8 @@ class RadarRepository(
     private val scope: CoroutineScope,
     private val appSettingsRepository: AppSettingsRepository,
     private val notificationManager: RadarNotificationManager,
-    private val wearableDataHost: WearableDataHost
+    private val wearableDataHost: WearableDataHost,
+    private val batterySessionRepository: BatterySessionRepository
 ) {
     private val TAG = "RadarRepository"
     private val TARGET_CHAR_UUID = UUID.fromString("f3641401-00b0-4240-ba50-05ca45bf8abc")
@@ -57,9 +64,34 @@ class RadarRepository(
     private val _radarBatteryLevel = MutableStateFlow(-1)
     val radarBatteryLevel = _radarBatteryLevel.asStateFlow()
 
+    private val _wearBatteryLevel = MutableStateFlow(-1)
+    val wearBatteryLevel = _wearBatteryLevel.asStateFlow()
+
+    private val _connectionElapsedSeconds = MutableStateFlow(0L)
+    val connectionElapsedSeconds = _connectionElapsedSeconds.asStateFlow()
+
     val suppressionRemainingSeconds = notificationManager.suppressionRemainingSeconds
 
     private var batteryChar: BluetoothGattCharacteristic? = null
+
+    // セッション管理
+    private var currentSession: BatterySession? = null
+    private var elapsedTimerJob: kotlinx.coroutines.Job? = null
+
+    // Target notification control
+    private var lastNotifiedTargetState = false
+    private var lastTargetNotificationTime = 0L
+    private val TARGET_NOTIFICATION_COOLDOWN_MS = 30_000L
+
+    // 通信種別カウント（currentSessionとは独立して管理）
+    @Volatile private var connectionStateCommCount = 0
+    @Volatile private var batteryCommCount = 0
+    @Volatile private var alertCommCount = 0
+    @Volatile private var targetsCommCount = 0
+    @Volatile private var powerSavingCommCount = 0
+
+    // セッション遷移の排他制御
+    private val sessionLock = Any()
 
     init {
         scope.launch {
@@ -73,16 +105,87 @@ class RadarRepository(
                 wearNotificationMode = mode
             }
         }
+
+        // 走行セッション中のモード変更を監視
+        scope.launch {
+            appSettingsRepository.getFlow(Settings.WEAR_POWER_SAVING_MODE).collectLatest { enabled ->
+                currentSession?.let { session ->
+                    currentSession = if (enabled) {
+                        session.copy(wasPowerSavingMode = true)
+                    } else {
+                        session.copy(wasNormalMode = true)
+                    }
+                }
+            }
+        }
+    }
+
+    // --- 通信種別カウント ---
+
+    fun incrementConnectionStateCount() {
+        connectionStateCommCount++
+        Log.d(TAG, "Comm [接続状態]: $connectionStateCommCount")
+    }
+
+    fun incrementBatteryCount() {
+        batteryCommCount++
+        Log.d(TAG, "Comm [バッテリー]: $batteryCommCount")
+    }
+
+    fun incrementAlertCount() {
+        alertCommCount++
+        Log.d(TAG, "Comm [アラート]: $alertCommCount")
+    }
+
+    fun incrementTargetsCount() {
+        targetsCommCount++
+        Log.d(TAG, "Comm [ターゲット]: $targetsCommCount")
+    }
+
+    fun incrementPowerSavingCount() {
+        powerSavingCommCount++
+        Log.d(TAG, "Comm [省電力]: $powerSavingCommCount")
     }
 
     // --- RadarConnectionManager から呼ばれる公開メソッド ---
 
     fun setConnectionState(state: ConnectionState) {
-        _connectionState.value = state
+        synchronized(sessionLock) {
+            val oldState = _connectionState.value
+            _connectionState.value = state
+
+            if (oldState !is ConnectionState.Connected && state is ConnectionState.Connected) {
+                // 接続: OFFセッション保存 → ONセッション開始
+                lastNotifiedTargetState = false
+                lastTargetNotificationTime = 0L
+                saveCurrentSession()
+                startConnectedSession()
+                startElapsedTimer()
+            } else if (oldState is ConnectionState.Connected && state !is ConnectionState.Connected) {
+                // 切断: ONセッション保存 → OFFセッション開始
+                saveCurrentSession()
+                startDisconnectedSession()
+                stopElapsedTimer()
+            }
+        }
     }
 
     fun setConnectedDeviceName(name: String?) {
         _connectedDeviceName.value = name
+    }
+
+    fun setWearBatteryLevel(level: Int) {
+        _wearBatteryLevel.value = level
+        currentSession?.let { session ->
+            if (session.startWatchBattery < 0) {
+                val now = LocalDateTime.now()
+                currentSession = session.copy(
+                    startWatchBattery = level,
+                    watchBatteryReceivedTime = now
+                )
+                Log.d(TAG, "Updated session startWatchBattery to: $level% at ${formatTime(now)}")
+            }
+        }
     }
 
     fun resetState() {
@@ -91,7 +194,10 @@ class RadarRepository(
         _targets.value = emptyList()
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
+        _wearBatteryLevel.value = -1
         batteryChar = null
+        lastNotifiedTargetState = false
+        lastTargetNotificationTime = 0L
     }
 
     fun connect(device: android.bluetooth.BluetoothDevice) {
@@ -105,19 +211,155 @@ class RadarRepository(
         gatt?.disconnect()
         gatt?.close()
         gatt = null
+
+        // ON→OFF セッション遷移（synchronizedで排他制御）
+        synchronized(sessionLock) {
+            if (currentSession?.type == SessionType.CONNECTED) {
+                saveCurrentSession()
+                startDisconnectedSession()
+            }
+        }
+
         _connectionState.value = ConnectionState.Disconnected
         _connectedDeviceName.value = null
         _targets.value = emptyList()
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
+        _wearBatteryLevel.value = -1
         batteryChar = null
         notificationManager.handleBatteryUpdate(-1)
-        wearableDataHost.putTargetsData(emptyList())
+        stopElapsedTimer()
+        _connectionElapsedSeconds.value = 0L
     }
 
     fun close() {
         gatt?.close()
         gatt = null
+    }
+
+    // --- セッション管理 ---
+
+    private fun resetCommCounts() {
+        connectionStateCommCount = 0
+        batteryCommCount = 0
+        alertCommCount = 0
+        targetsCommCount = 0
+        powerSavingCommCount = 0
+    }
+
+    private fun startConnectedSession() {
+        resetCommCounts()
+
+        val phoneBat = getPhoneBatteryLevel()
+        val radarBat = _radarBatteryLevel.value
+        val now = LocalDateTime.now()
+
+        scope.launch {
+            val enabled = appSettingsRepository.getFlow(Settings.WEAR_POWER_SAVING_MODE).first()
+            currentSession = BatterySession(
+                id = UUID.randomUUID().toString(),
+                startTime = now,
+                sessionStartTime = now,
+                startPhoneBattery = phoneBat,
+                startWatchBattery = -1,
+                startRadarBattery = radarBat,
+                wasPowerSavingMode = enabled,
+                wasNormalMode = !enabled,
+                type = SessionType.CONNECTED
+            )
+            Log.d(TAG, "ON session started at ${formatTime(now)}: phone=$phoneBat, radar=$radarBat, ps=$enabled")
+        }
+    }
+
+    private fun startDisconnectedSession() {
+        resetCommCounts()
+
+        val now = LocalDateTime.now()
+        currentSession = BatterySession(
+            id = UUID.randomUUID().toString(),
+            startTime = now,
+            startPhoneBattery = -1,
+            startWatchBattery = -1,
+            startRadarBattery = -1,
+            type = SessionType.DISCONNECTED
+        )
+        Log.d(TAG, "OFF session started at ${formatTime(now)}")
+    }
+
+    private fun saveCurrentSession() {
+        val session = currentSession ?: return
+
+        val finalSession = when (session.type) {
+            SessionType.CONNECTED -> {
+                val phoneBat = getPhoneBatteryLevel()
+                val watchBat = _wearBatteryLevel.value
+                val radarBat = _radarBatteryLevel.value
+                session.copy(
+                    endTime = LocalDateTime.now(),
+                    startWatchBattery = if (session.startWatchBattery < 0) watchBat else session.startWatchBattery,
+                    startRadarBattery = if (session.startRadarBattery < 0) radarBat else session.startRadarBattery,
+                    endPhoneBattery = phoneBat,
+                    endWatchBattery = watchBat,
+                    endRadarBattery = radarBat,
+                    connectionStateCount = connectionStateCommCount,
+                    batteryCount = batteryCommCount,
+                    alertCount = alertCommCount,
+                    targetsCount = targetsCommCount,
+                    powerSavingCount = powerSavingCommCount
+                )
+            }
+            SessionType.DISCONNECTED -> {
+                session.copy(
+                    endTime = LocalDateTime.now(),
+                    connectionStateCount = connectionStateCommCount,
+                    batteryCount = batteryCommCount,
+                    alertCount = alertCommCount,
+                    targetsCount = targetsCommCount,
+                    powerSavingCount = powerSavingCommCount
+                )
+            }
+        }
+
+        currentSession = null
+        batterySessionRepository.addSession(finalSession)
+        Log.d(TAG, "${session.type} session saved: ${finalSession.durationSeconds}s, comm=${finalSession.totalCommunicationCount}")
+    }
+
+    private fun startElapsedTimer() {
+        _connectionElapsedSeconds.value = 0L
+        elapsedTimerJob?.cancel()
+        elapsedTimerJob = scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(1000L)
+                val session = currentSession ?: return@launch
+                val startInstant = java.time.ZonedDateTime.of(session.startTime, java.time.ZoneId.systemDefault()).toInstant()
+                val nowInstant = java.time.ZonedDateTime.now().toInstant()
+                val elapsedSeconds = java.time.Duration.between(startInstant, nowInstant).seconds
+                _connectionElapsedSeconds.value = elapsedSeconds
+            }
+        }
+        Log.d(TAG, "Elapsed timer started")
+    }
+
+    private fun stopElapsedTimer() {
+        elapsedTimerJob?.cancel()
+        elapsedTimerJob = null
+        Log.d(TAG, "Elapsed timer stopped")
+    }
+
+    private fun formatTime(time: LocalDateTime): String {
+        return try {
+            time.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+        } catch (e: Exception) {
+            "不明"
+        }
+    }
+
+    private fun getPhoneBatteryLevel(): Int {
+        val batteryStatus: Intent? = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        return if (level >= 0 && scale > 0) (level * 100) / scale else -1
     }
 
     // --- GATT Callback（純粋なGATT通信処理のみ）---
@@ -133,19 +375,18 @@ class RadarRepository(
                     Log.d(TAG, "Successfully disconnected from GATT server.")
                     gatt.close()
                     this@RadarRepository.gatt = null
-                    _connectionState.value = ConnectionState.Disconnected
+                    setConnectionState(ConnectionState.Disconnected)
                 }
             } else {
                 Log.e(TAG, "GATT Error: status=$status for ${gatt.device.address}")
                 gatt.close()
                 this@RadarRepository.gatt = null
-                _connectionState.value = ConnectionState.Error("GATT Error $status")
+                setConnectionState(ConnectionState.Error("GATT Error $status"))
             }
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             Log.d(TAG, "onMtuChanged: mtu=$mtu, status=$status.")
-            // FastRecMobパターン: discoverServices前に確実に待機
             scope.launch {
                 delay(600)
                 Log.d(TAG, "Discovering services...")
@@ -156,7 +397,6 @@ class RadarRepository(
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             Log.d(TAG, "onServicesDiscovered: status=$status")
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                // デバイスの全サービス・キャラクタリスティックを列挙
                 Log.d(TAG, "=== Device Service Enumeration ===")
                 for (service in gatt.services) {
                     Log.d(TAG, "Service: ${service.uuid} (${service.characteristics.size} chars)")
@@ -177,7 +417,7 @@ class RadarRepository(
                     if (characteristic != null) {
                         Log.d(TAG, "Found Radar Characteristic: ${characteristic.uuid} in service: ${service.uuid}")
                         enableNotifications(gatt, characteristic)
-                        _connectionState.value = ConnectionState.Connected
+                        setConnectionState(ConnectionState.Connected)
                         found = true
                     }
 
@@ -203,11 +443,9 @@ class RadarRepository(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "SUCCESS: Notifications enabled on Gardia!")
                 batteryChar?.let { battery ->
-                    // READを実行（接続直後に現在値を取得）
                     if (battery.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
                         Log.d(TAG, "Reading battery level...")
                         gatt.readCharacteristic(battery)
-                        // batteryCharはonCharacteristicReadでクリアする
                     } else {
                         Log.d(TAG, "Enabling battery level notifications (no READ property)...")
                         enableNotifications(gatt, battery)
@@ -263,10 +501,6 @@ class RadarRepository(
         }
     }
 
-    /**
-     * 初回READ完了後、バッテリー通知も有効化する。
-     * これによりREAD値とNOTIFY値を比較でき、キャッシュ値の検出が可能になる。
-     */
     private fun enableBatteryNotificationIfNeeded(gatt: BluetoothGatt) {
         batteryChar?.let { battery ->
             if (battery.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
@@ -283,13 +517,31 @@ class RadarRepository(
             val hex = value.joinToString(" ") { "%02x".format(it) }
             Log.d(TAG, "Radar battery level: $level% (source=$source, raw=[$hex], ${value.size} bytes)")
             _radarBatteryLevel.value = level
+            incrementBatteryCount()
             wearableDataHost.putRadarBatteryLevel(level)
             notificationManager.handleBatteryUpdate(level)
+
+            currentSession?.let { session ->
+                val now = LocalDateTime.now()
+                if (session.startRadarBattery < 0) {
+                    currentSession = session.copy(
+                        startRadarBattery = level,
+                        radarBatteryReceivedTime = now
+                    )
+                    Log.d(TAG, "Updated session startRadarBattery to: $level% at ${formatTime(now)}")
+                }
+            }
         }
     }
 
     private fun decodeRadarData(data: ByteArray) {
         if (data.isEmpty()) return
+
+        // レーダーパケット受信回数をカウント
+        currentSession?.let { session ->
+            currentSession = session.copy(radarPacketCount = session.radarPacketCount + 1)
+        }
+
         val hexString = data.joinToString("") { "%02x".format(it) }
         _rawPacket.value = hexString
 
@@ -317,7 +569,33 @@ class RadarRepository(
         }
 
         _targets.value = newTargets
-        wearableDataHost.putTargetsData(newTargets)
+
+        // 車両状態変化を検出してアラート通知
+        val hasTargets = newTargets.isNotEmpty()
+        val stateChanged = (lastNotifiedTargetState != hasTargets)
+
+        if (stateChanged) {
+            val now = System.currentTimeMillis()
+            val elapsed = now - lastTargetNotificationTime
+
+            if (elapsed >= TARGET_NOTIFICATION_COOLDOWN_MS) {
+                lastNotifiedTargetState = hasTargets
+                lastTargetNotificationTime = now
+                incrementAlertCount()
+                wearableDataHost.putAlertData(hasTargets)
+                Log.d(TAG, "Alert notification sent: ${if(hasTargets) "detected" else "cleared"}")
+            } else {
+                Log.d(TAG, "Alert notification skipped: cooldown (${elapsed}ms < ${TARGET_NOTIFICATION_COOLDOWN_MS}ms)")
+            }
+        }
+
+        // 省電力モードではターゲットデータ送信をスキップ
+        val isPowerSaving = currentSession?.wasPowerSavingMode == true
+        if (!isPowerSaving) {
+            incrementTargetsCount()
+            wearableDataHost.putTargetsData(newTargets)
+        }
+
         notificationManager.handleRadarUpdate(newTargets, phoneNotificationMode, wearNotificationMode)
     }
 }

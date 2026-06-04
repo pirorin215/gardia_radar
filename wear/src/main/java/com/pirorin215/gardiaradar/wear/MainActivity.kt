@@ -57,6 +57,9 @@ class MainActivity : ComponentActivity() {
     private var batteryLevel by mutableIntStateOf(-1)
     private var isConnected by mutableStateOf<Boolean?>(null)
     private var radarBatteryLevel by mutableIntStateOf(-1)
+    private var connectionStartTime by mutableStateOf<Long?>(null)
+    private var connectionEndTime by mutableStateOf<Long?>(null)
+    private var elapsedTime by mutableStateOf("")
 
     private val handler = Handler(Looper.getMainLooper())
     private val finishOnDisconnectRunnable = Runnable {
@@ -74,7 +77,13 @@ class MainActivity : ComponentActivity() {
                 }
                 WearableDataListener.ACTION_CONNECTION_STATE_CHANGED -> {
                     isConnected = intent.getBooleanExtra("isConnected", false)
-                    handleConnectionStateChange(isConnected)
+                    val startTime = intent.getLongExtra("startTime", -1L)
+                    val endTime = intent.getLongExtra("endTime", -1L)
+                    handleConnectionStateChange(
+                        isConnected,
+                        if (startTime > 0) startTime else null,
+                        if (endTime > 0) endTime else null
+                    )
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
@@ -124,31 +133,54 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readInitialState() {
+        val prefs = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+        isConnected = prefs.getBoolean(WearableDataListener.PREF_KEY_CONNECTED, false)
+        val startTime = prefs.getLong(WearableDataListener.PREF_KEY_START_TIME, -1L)
+        val endTime = prefs.getLong(WearableDataListener.PREF_KEY_END_TIME, -1L)
+        handleConnectionStateChange(
+            isConnected,
+            if (startTime > 0) startTime else null,
+            if (endTime > 0) endTime else null
+        )
+
         val dataClient = Wearable.getDataClient(this)
         dataClient.dataItems.addOnSuccessListener { dataItems ->
             for (item in dataItems) {
                 when (item.uri.path) {
-                    "/radar-connection-state" -> {
-                        val dataMap = DataMapItem.fromDataItem(item).dataMap
-                        isConnected = dataMap.getBoolean("isConnected", false)
-                        handleConnectionStateChange(isConnected)
-                    }
                     "/radar-battery" -> {
                         val dataMap = DataMapItem.fromDataItem(item).dataMap
                         radarBatteryLevel = dataMap.getInt("level", -1)
                     }
                 }
             }
+            dataItems.release()
         }
     }
 
-    private fun handleConnectionStateChange(connected: Boolean?) {
+    private fun handleConnectionStateChange(connected: Boolean?, startTime: Long? = null, endTime: Long? = null) {
         handler.removeCallbacks(finishOnDisconnectRunnable)
-        if (connected == false) {
-            // 切断時は10秒後にアプリを終了してウォッチフェイスに戻る
-            handler.postDelayed(finishOnDisconnectRunnable, 10000L)
+        if (connected == true) {
+            if (startTime != null) {
+                connectionStartTime = startTime
+            } else if (connectionStartTime == null) {
+                connectionStartTime = System.currentTimeMillis()
+            }
+            connectionEndTime = null
+        } else if (connected == false) {
+            // 切断時も開始記録を維持し、終了時刻を更新する
+            if (startTime != null) {
+                connectionStartTime = startTime
+            }
+            if (endTime != null) {
+                connectionEndTime = endTime
+            } else if (connectionEndTime == null) {
+                connectionEndTime = System.currentTimeMillis()
+            }
+            // 切断時は60秒後にアプリを終了してウォッチフェイスに戻る
+            handler.postDelayed(finishOnDisconnectRunnable, 60000L)
+        } else {
+            // connected == null (不明)
         }
-        // 接続時(connected == true) または不明(null) の場合は何もしない（前面に留まる）
     }
 
     override fun onDestroy() {
@@ -162,11 +194,28 @@ class MainActivity : ComponentActivity() {
         // 時刻と曜日を1分間隔で更新（分の切り替わりに同期）
         val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
         val dayFormat = remember { SimpleDateFormat("d E", Locale.getDefault()) }
-        LaunchedEffect(Unit) {
+        LaunchedEffect(connectionStartTime, connectionEndTime, isConnected) {
             while (true) {
                 val now = Date()
                 currentTime = timeFormat.format(now)
                 currentDayOfWeek = dayFormat.format(now)
+
+                val start = connectionStartTime
+                val end = connectionEndTime
+
+                if (start != null) {
+                    val durationMillis = if (isConnected == true || end == null) {
+                        now.time - start
+                    } else {
+                        end - start
+                    }
+                    val hours = (durationMillis / (1000 * 60 * 60)).toInt()
+                    val minutes = ((durationMillis / (1000 * 60)) % 60).toInt()
+                    elapsedTime = String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
+                } else {
+                    elapsedTime = ""
+                }
+
                 // 次の分の00秒まで待つ
                 val seconds = Calendar.getInstance().get(Calendar.SECOND)
                 kotlinx.coroutines.delay((60 - seconds) * 1000L)
@@ -204,6 +253,25 @@ class MainActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // 経過時間表示（接続中または切断後の記録がある場合に表示）
+                    Box(
+                        modifier = Modifier.height(30.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (elapsedTime.isNotEmpty()) {
+                            val icon = if (isConnected == true) "⏱️" else "🏁"
+                            Text(
+                                text = "$icon $elapsedTime",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 

@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.pirorin215.gardiaradar.ui.screen.BatteryHistoryScreen
 import com.pirorin215.gardiaradar.ui.screen.MainScreen
 import com.pirorin215.gardiaradar.ui.screen.SettingsScreen
 import com.pirorin215.gardiaradar.ui.theme.BleTemplateTheme
@@ -123,10 +124,15 @@ class MainActivity : ComponentActivity() {
                     when(currentScreen) {
                         "main" -> MainScreen(
                             viewModel = radarViewModel,
-                            onNavigateToSettings = { currentScreen = "settings" }
+                            onNavigateToSettings = { currentScreen = "settings" },
+                            onNavigateToHistory = { currentScreen = "history" }
                         )
                         "settings" -> SettingsScreen(
                             viewModel = appSettingsViewModel,
+                            onBack = { currentScreen = "main" }
+                        )
+                        "history" -> BatteryHistoryScreen(
+                            viewModel = radarViewModel,
                             onBack = { currentScreen = "main" }
                         )
                     }

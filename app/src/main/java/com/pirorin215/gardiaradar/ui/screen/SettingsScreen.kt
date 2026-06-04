@@ -11,11 +11,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.ThemeMode
 import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
+
+private val Orange = Color(0xFFFF9100)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,14 +34,15 @@ fun SettingsScreen(
     val radarLowBatteryThreshold by viewModel.radarLowBatteryThreshold.collectAsState()
     val targetDeviceAddress by viewModel.targetDeviceAddress.collectAsState()
     val targetDeviceName by viewModel.targetDeviceName.collectAsState()
+    val wearPowerSavingMode by viewModel.wearPowerSavingMode.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("設定") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
                     }
                 }
             )
@@ -65,7 +69,7 @@ fun SettingsScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             // --- Phone Notifications ---
-            Text("Phone Notifications", style = MaterialTheme.typography.titleMedium)
+            Text("スマホの通知設定", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             NotificationMode.values().forEach { mode ->
@@ -78,9 +82,9 @@ fun SettingsScreen(
                         onClick = { viewModel.savePhoneNotificationMode(mode) }
                     )
                     val label = when(mode) {
-                        NotificationMode.FIRST_ONLY -> "Notify on first detection only (車列の最初だけ)"
-                        NotificationMode.EVERY_TIME -> "Notify for every new car (車が検出されるたび)"
-                        NotificationMode.OFF -> "Notifications OFF"
+                        NotificationMode.FIRST_ONLY -> "最初の1台目のみ通知"
+                        NotificationMode.EVERY_TIME -> "車両を検知するたびに通知"
+                        NotificationMode.OFF -> "通知オフ"
                     }
                     Text(label, fontSize = 14.sp)
                 }
@@ -89,7 +93,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // --- Wear OS Notifications ---
-            Text("Wear OS Notifications", style = MaterialTheme.typography.titleMedium)
+            Text("ウォッチ(Wear OS)の通知設定", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             NotificationMode.values().forEach { mode ->
@@ -102,9 +106,9 @@ fun SettingsScreen(
                         onClick = { viewModel.saveWearNotificationMode(mode) }
                     )
                     val label = when(mode) {
-                        NotificationMode.FIRST_ONLY -> "Notify on first detection only (車列の最初だけ)"
-                        NotificationMode.EVERY_TIME -> "Notify for every new car (車が検出されるたび)"
-                        NotificationMode.OFF -> "Notifications OFF"
+                        NotificationMode.FIRST_ONLY -> "最初の1台目のみ通知"
+                        NotificationMode.EVERY_TIME -> "車両を検知するたびに通知"
+                        NotificationMode.OFF -> "通知オフ"
                     }
                     Text(label, fontSize = 14.sp)
                 }
@@ -119,9 +123,9 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Fullscreen notification", style = MaterialTheme.typography.bodyMedium)
+                    Text("全画面通知 (スマホ)", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Show notification on lock screen (ロック画面で全画面表示)",
+                        "ロック画面などで全画面の警告を表示します",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -134,11 +138,33 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Wear OS Power Saving Mode toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("ウォッチの省電力モード", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "画面表示を無効化し、振動と音のみで警告します。ウォッチの電池消費を大幅に抑えられます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = wearPowerSavingMode,
+                    onCheckedChange = { viewModel.saveWearPowerSavingMode(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Clear suppression time slider
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Clear suppression time (車列クリア後の通知抑制)", style = MaterialTheme.typography.bodyMedium)
+                Text("通知の抑制時間", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "If vehicles reappear within ${clearSuppressionSeconds}s after clearing, treat as same convoy (車列がクリアされてから${clearSuppressionSeconds}秒以内に再検知された場合は通知しない)",
+                    "車両がいなくなってから、${clearSuppressionSeconds}秒以内の再検知は同じ車列として扱い通知しません",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -147,7 +173,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${clearSuppressionSeconds}s", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                    Text("${clearSuppressionSeconds}秒", style = MaterialTheme.typography.bodyMedium, minLines = 1)
                     Slider(
                         value = clearSuppressionSeconds.toFloat(),
                         onValueChange = { viewModel.saveClearSuppressionSeconds(it.toInt()) },
@@ -161,11 +187,11 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- Radar Low Battery Threshold ---
-            Text("Radar Low Battery Threshold", style = MaterialTheme.typography.titleMedium)
+            Text("レーダー電池残量の警告しきい値", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "レーダー電池残量がしきい値を下回ったら通知します",
+                    "レーダーの電池残量が設定値を下回った際に通知します",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -188,7 +214,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- Theme Setting ---
-            Text("Theme Mode", style = MaterialTheme.typography.titleMedium)
+            Text("テーマ設定", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             
             Row(
@@ -201,7 +227,12 @@ fun SettingsScreen(
                             selected = (mode == currentThemeMode),
                             onClick = { viewModel.saveThemeMode(mode) }
                         )
-                        Text(mode.name, fontSize = 14.sp)
+                        val themeLabel = when(mode) {
+                            ThemeMode.SYSTEM -> "システム"
+                            ThemeMode.LIGHT -> "ライト"
+                            ThemeMode.DARK -> "ダーク"
+                        }
+                        Text(themeLabel, fontSize = 14.sp)
                     }
                 }
             }

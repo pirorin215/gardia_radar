@@ -7,12 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,14 +31,25 @@ private val Orange = Color(0xFFFF9100)
 @Composable
 fun MainScreen(
     viewModel: RadarViewModel,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToHistory: () -> Unit
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsState()
     val targets by viewModel.targets.collectAsState()
     val rawPacket by viewModel.rawPacket.collectAsState()
     val radarBatteryLevel by viewModel.radarBatteryLevel.collectAsState()
+    val wearBatteryLevel by viewModel.wearBatteryLevel.collectAsState()
     val suppressionRemaining by viewModel.suppressionRemainingSeconds.collectAsState()
+    val connectionElapsedSeconds by viewModel.connectionElapsedSeconds.collectAsState()
+
+    // Convert seconds to HH:MM:SS format
+    val elapsedTimeString = remember(connectionElapsedSeconds) {
+        val hours = connectionElapsedSeconds / 3600
+        val minutes = (connectionElapsedSeconds % 3600) / 60
+        val seconds = connectionElapsedSeconds % 60
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    }
 
     // Determine overall threat level for background color
     val maxThreat = targets.maxOfOrNull { it.threat } ?: 0
@@ -73,6 +86,9 @@ fun MainScreen(
                     titleContentColor = Color.White,
                 ),
                 actions = {
+                    IconButton(onClick = onNavigateToHistory) {
+                        Icon(Icons.Default.History, contentDescription = "History", tint = Color.White)
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                     }
@@ -93,6 +109,41 @@ fun MainScreen(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // 接続経過時間、レーダーバッテリ残量、ウォッチバッテリ残量
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    // 接続経過時間
+                    if (connectionState is ConnectionState.Connected) {
+                        Text(
+                            text = "⏱ $elapsedTimeString",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
+
+                    // レーダー電池残量
+                    Text(
+                        text = "📡 ${if (radarBatteryLevel >= 0) "$radarBatteryLevel%" else "--%"}",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // ウォッチ電池残量
+                    Text(
+                        text = "⌚ ${if (wearBatteryLevel >= 0) "$wearBatteryLevel%" else "--%"}",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 // Connection Status and Reconnect Button (Always visible)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -130,16 +181,6 @@ fun MainScreen(
                     ) {
                         Text("再接続", fontSize = 16.sp, color = Color.White)
                     }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    // レーダー電池残量（常に表示）
-                    Text(
-                        text = "🔋 ${if (radarBatteryLevel >= 0) "$radarBatteryLevel%" else "--%"}",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

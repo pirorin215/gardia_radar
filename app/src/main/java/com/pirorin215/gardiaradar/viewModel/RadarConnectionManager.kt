@@ -78,6 +78,8 @@ class RadarConnectionManager(
         }
     }
 
+    private var lastSentConnected: Boolean? = null
+
     init {
         // Bluetooth状態レシーバー登録
         val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
@@ -89,11 +91,19 @@ class RadarConnectionManager(
                 Log.d(TAG, "Repository state changed to: $state")
                 when (state) {
                     is ConnectionState.Disconnected -> {
-                        wearableDataHost.putConnectionStateData(false)
+                        repository.incrementConnectionStateCount()
+                        if (lastSentConnected == true) {
+                            Log.d(TAG, "Sending Disconnected state to Wear OS (was previously Connected)")
+                            wearableDataHost.putConnectionStateData(false)
+                            lastSentConnected = false
+                        } else if (lastSentConnected == null) {
+                            Log.d(TAG, "Ignoring initial Disconnected state for Wear OS sync")
+                            lastSentConnected = false
+                        }
                         forceReconnect()
                     }
                     is ConnectionState.Error -> {
-                        wearableDataHost.putConnectionStateData(false)
+                        // 切断通知はDisconnectedハンドラで送信（重複防止）
                         // エラー時はリソースを解放してから再スキャン
                         repository.disconnect()
                         repository.close()
@@ -105,8 +115,13 @@ class RadarConnectionManager(
                         }
                     }
                     is ConnectionState.Connected -> {
-                        wearableDataHost.putConnectionStateData(true)
-                        Log.d(TAG, "Connection state sent to Wear OS: Connected")
+                        repository.incrementConnectionStateCount()
+                        if (lastSentConnected != true) {
+                            Log.d(TAG, "Sending Connected state to Wear OS")
+                            wearableDataHost.putConnectionStateData(true)
+                            lastSentConnected = true
+                        }
+                        Log.d(TAG, "Connection state is Connected")
                     }
                     else -> {
                         // Scanning, Connecting は何もしない
@@ -136,6 +151,15 @@ class RadarConnectionManager(
                         restartScan(forceScan = true)
                     }
                 }
+            }
+        }
+
+        // 省電力モード設定の変更を監視してWear OSへ同期
+        scope.launch {
+            appSettingsRepository.getFlow(Settings.WEAR_POWER_SAVING_MODE).collectLatest { enabled ->
+                Log.d(TAG, "Wear power saving mode changed: $enabled. Syncing to Wear OS.")
+                repository.incrementPowerSavingCount()
+                wearableDataHost.putPowerSavingModeData(enabled)
             }
         }
     }

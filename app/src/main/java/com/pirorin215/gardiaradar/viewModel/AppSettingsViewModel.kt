@@ -39,6 +39,9 @@ class AppSettingsViewModel(
     val targetDeviceName: StateFlow<String> = repository.getFlow(Settings.TARGET_DEVICE_NAME)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
+    val wearPowerSavingMode: StateFlow<Boolean> = repository.getFlow(Settings.WEAR_POWER_SAVING_MODE)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -75,5 +78,9 @@ class AppSettingsViewModel(
             repository.setValue(Settings.TARGET_DEVICE_ADDRESS, "")
             repository.setValue(Settings.TARGET_DEVICE_NAME, "")
         }
+    }
+
+    fun saveWearPowerSavingMode(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.WEAR_POWER_SAVING_MODE, enabled) }
     }
 }

@@ -71,6 +71,11 @@ object Settings {
         preferencesKey = stringPreferencesKey("target_device_name"),
         defaultValue = ""
     )
+
+    val WEAR_POWER_SAVING_MODE = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("wear_power_saving_mode"),
+        defaultValue = false
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {

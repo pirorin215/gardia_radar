@@ -66,6 +66,7 @@ dependencies {
 
     // DataStore for persistent settings
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.gson)
 
     // Koin for DI
     implementation(libs.koin.android)

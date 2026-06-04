@@ -45,6 +45,7 @@ class WearableDataHost(
     }
 
     fun putConnectionStateData(isConnected: Boolean) {
+        Log.d(TAG, "putConnectionStateData called: isConnected=$isConnected")
         val putDataMapRequest = PutDataMapRequest.create("/radar-connection-state")
         putDataMapRequest.dataMap.putBoolean("isConnected", isConnected)
         putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
@@ -53,10 +54,10 @@ class WearableDataHost(
 
         dataClient.putDataItem(putDataRequest).apply {
             addOnSuccessListener {
-                Log.d(TAG, "Connection state hosted: connected=$isConnected")
+                Log.d(TAG, "Successfully hosted connection state: connected=$isConnected")
             }
             addOnFailureListener { e ->
-                Log.e(TAG, "Failed to host connection state", e)
+                Log.e(TAG, "Failed to host connection state: connected=$isConnected", e)
             }
         }
     }
@@ -74,6 +75,40 @@ class WearableDataHost(
             }
             addOnFailureListener { e ->
                 Log.e(TAG, "Failed to host radar battery level", e)
+            }
+        }
+    }
+
+    fun putPowerSavingModeData(enabled: Boolean) {
+        val putDataMapRequest = PutDataMapRequest.create("/power-saving-mode")
+        putDataMapRequest.dataMap.putBoolean("enabled", enabled)
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Power saving mode hosted: $enabled")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host power saving mode", e)
+            }
+        }
+    }
+
+    fun putAlertData(hasTargets: Boolean) {
+        val putDataMapRequest = PutDataMapRequest.create("/radar-alert")
+        putDataMapRequest.dataMap.putBoolean("hasTargets", hasTargets)
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Alert data hosted: hasTargets=$hasTargets")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host alert data", e)
             }
         }
     }
