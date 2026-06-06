@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.gestures.detectTapGestures
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -189,6 +191,23 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(targetsReceiver)
     }
 
+    private fun triggerDebugAlert() {
+        Log.d("MainActivity", "Triggering debug alert via broadcast")
+
+        // まずServiceを確実に起動
+        val serviceIntent = Intent(this, RadarListenerService::class.java)
+        startService(serviceIntent)
+
+        // 少し遅延させてからBroadcastを送る
+        handler.postDelayed({
+            val intent = Intent(RadarListenerService.ACTION_DEBUG_ALERT).apply {
+                putExtra(RadarListenerService.EXTRA_ALERT_JSON, "{\"targetCount\":1,\"targets\":[{\"id\":1,\"distance\":100,\"speed\":30,\"threat\":1}]}")
+            }
+            sendBroadcast(intent)
+            Log.d("MainActivity", "Broadcast sent")
+        }, 100)
+    }
+
     @Composable
     fun MainScreen() {
         // 時刻と曜日を1分間隔で更新（分の切り替わりに同期）
@@ -296,7 +315,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 接続状態バー（画面上部）
+            // 接続状態バー（画面上部）- 長押しでデバッグアラート
             val connectionColor = when (isConnected) {
                 true -> Color(0xFF00C853)   // 緑：接続済み
                 false -> Color(0xFFFF1744)  // 赤：切断
@@ -309,6 +328,13 @@ class MainActivity : ComponentActivity() {
                     .width(200.dp)
                     .height(30.dp)
                     .background(connectionColor)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = {
+                                triggerDebugAlert()
+                            }
+                        )
+                    }
             )
 
             // 自転車アイコン（画面上端）
