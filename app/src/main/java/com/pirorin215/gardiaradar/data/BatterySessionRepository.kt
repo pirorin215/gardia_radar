@@ -93,4 +93,9 @@ class BatterySessionRepository(private val context: Context) {
         val newList = _sessions.value.filter { it.id != id }
         saveSessions(newList)
     }
+
+    fun deleteSessions(ids: List<String>) {
+        val newList = _sessions.value.filter { it.id !in ids }
+        saveSessions(newList)
+    }
 }

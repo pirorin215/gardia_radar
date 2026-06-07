@@ -18,6 +18,7 @@ class RadarViewModel(
     val wearBatteryLevel = repository.wearBatteryLevel
     val suppressionRemainingSeconds = repository.suppressionRemainingSeconds
     val connectionElapsedSeconds = repository.connectionElapsedSeconds
+    val rssi = repository.rssi
     val batterySessions = batterySessionRepository.sessions
 
     fun startScan() {
@@ -34,5 +35,9 @@ class RadarViewModel(
 
     fun deleteSession(sessionId: String) {
         batterySessionRepository.deleteSession(sessionId)
+    }
+
+    fun deleteSessions(sessionIds: List<String>) {
+        batterySessionRepository.deleteSessions(sessionIds)
     }
 }

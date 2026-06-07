@@ -35,6 +35,10 @@ fun SettingsScreen(
     val targetDeviceAddress by viewModel.targetDeviceAddress.collectAsState()
     val targetDeviceName by viewModel.targetDeviceName.collectAsState()
     val wearPowerSavingMode by viewModel.wearPowerSavingMode.collectAsState()
+    val rssiDisconnectEnabled by viewModel.rssiDisconnectEnabled.collectAsState()
+    val rssiConnectThreshold by viewModel.rssiConnectThreshold.collectAsState()
+    val rssiDisconnectThreshold by viewModel.rssiDisconnectThreshold.collectAsState()
+    val rssiDisconnectCount by viewModel.rssiDisconnectCount.collectAsState()
 
     Scaffold(
         topBar = {
@@ -208,6 +212,130 @@ fun SettingsScreen(
                         steps = 100,
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- RSSI Settings ---
+            Text("RSSI設定", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "通信品質に基づいて接続と切断を制御します",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // RSSI Auto Disconnect toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("RSSI自動切断を有効にする", style = MaterialTheme.typography.bodyMedium)
+                }
+                Switch(
+                    checked = rssiDisconnectEnabled,
+                    onCheckedChange = { viewModel.saveRssiDisconnectEnabled(it) }
+                )
+            }
+
+            if (rssiDisconnectEnabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // RSSI Connect Threshold slider
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "接続時のしきい値 (dBm)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "この値を下回る場合は接続しません（スキャン時の判定）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${rssiConnectThreshold}dBm", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                        Slider(
+                            value = rssiConnectThreshold.toFloat(),
+                            onValueChange = { viewModel.saveRssiConnectThreshold(it.toInt()) },
+                            valueRange = -100f..-40f,
+                            steps = 60,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // RSSI Disconnect Threshold slider
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "切断時のしきい値 (dBm)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "この値を下回った場合、切断カウントを増やします（接続後の監視）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${rssiDisconnectThreshold}dBm", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                        Slider(
+                            value = rssiDisconnectThreshold.toFloat(),
+                            onValueChange = { viewModel.saveRssiDisconnectThreshold(it.toInt()) },
+                            valueRange = -100f..-40f,
+                            steps = 60,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // RSSI Disconnect Count slider
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "切断判定回数",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "切断時のしきい値を下回った回数がこの値に達した場合、切断します（5秒ごとにチェック）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${rssiDisconnectCount}回", style = MaterialTheme.typography.bodyMedium, minLines = 1)
+                        Slider(
+                            value = rssiDisconnectCount.toFloat(),
+                            onValueChange = {
+                                val count = it.toInt()
+                                if (count >= 1) {
+                                    viewModel.saveRssiDisconnectCount(count)
+                                }
+                            },
+                            valueRange = 1f..10f,
+                            steps = 9,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 

@@ -8,6 +8,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,16 +38,53 @@ fun BatteryHistoryScreen(
     val sessions by viewModel.batterySessions.collectAsState(initial = emptyList())
     var selectedSession by remember { mutableStateOf<BatterySession?>(null) }
 
+    // 選択モードの状態管理
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("通信履歴") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
+            if (selectionMode) {
+                // 選択モード時のAppBar
+                TopAppBar(
+                    title = {
+                        Text("${selectedIds.size}件選択")
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            selectionMode = false
+                            selectedIds = emptySet()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "選択モード終了")
+                        }
+                    },
+                    actions = {
+                        if (selectedIds.isNotEmpty()) {
+                            IconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.Delete, contentDescription = "選択削除", tint = Color.Red)
+                            }
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                // 通常時のAppBar
+                TopAppBar(
+                    title = { Text("通信履歴") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
+                        }
+                    },
+                    actions = {
+                        if (sessions.isNotEmpty()) {
+                            IconButton(onClick = { selectionMode = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = "選択モード")
+                            }
+                        }
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         if (sessions.isEmpty()) {
@@ -59,29 +100,66 @@ fun BatteryHistoryScreen(
                 items(sessions) { session ->
                     SessionCard(
                         session = session,
-                        onClick = { selectedSession = session }
+                        isSelected = session.id in selectedIds,
+                        selectionMode = selectionMode,
+                        onClick = {
+                            if (selectionMode) {
+                                // 選択モード時は選択/解除をトグル
+                                selectedIds = if (session.id in selectedIds) {
+                                    selectedIds - session.id
+                                } else {
+                                    selectedIds + session.id
+                                }
+                            } else {
+                                // 通常時は詳細ダイアログを表示
+                                selectedSession = session
+                            }
+                        }
                     )
                 }
             }
         }
     }
 
-    // 詳細ダイアログ
-    selectedSession?.let { session ->
-        dumpSessionInfo(session)
-        SessionDetailDialog(
-            session = session,
-            onDismiss = { selectedSession = null },
-            onDelete = {
-                viewModel.deleteSession(session.id)
-                selectedSession = null
+    // 詳細ダイアログ（選択モード時は表示しない）
+    if (!selectionMode) {
+        selectedSession?.let { session ->
+            dumpSessionInfo(session)
+            SessionDetailDialog(
+                session = session,
+                onDismiss = { selectedSession = null },
+                onDelete = {
+                    viewModel.deleteSession(session.id)
+                    selectedSession = null
+                }
+            )
+        }
+    }
+
+    // 選択削除確認ダイアログ
+    if (showDeleteDialog) {
+        DeleteConfirmDialog(
+            count = selectedIds.size,
+            onConfirm = {
+                viewModel.deleteSessions(selectedIds.toList())
+                selectedIds = emptySet()
+                selectionMode = false
+                showDeleteDialog = false
+            },
+            onDismiss = {
+                showDeleteDialog = false
             }
         )
     }
 }
 
 @Composable
-fun SessionCard(session: BatterySession, onClick: () -> Unit) {
+fun SessionCard(
+    session: BatterySession,
+    isSelected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit
+) {
     val isOn = session.type == SessionType.CONNECTED
     val indicatorColor = if (isOn) OnColor else OffColor
     val typeLabel = if (isOn) "ON" else "OFF"
@@ -90,16 +168,25 @@ fun SessionCard(session: BatterySession, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // ヘッダー行: タイプ + 時刻 + 通信数
+            // ヘッダー行: タイプ + 時刻 + 通信数 + チェックボックス
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Surface(
                         color = indicatorColor.copy(alpha = 0.2f),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
@@ -119,6 +206,7 @@ fun SessionCard(session: BatterySession, onClick: () -> Unit) {
                         fontSize = 14.sp
                     )
                 }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "通信 ${session.totalCommunicationCount}回",
@@ -126,6 +214,24 @@ fun SessionCard(session: BatterySession, onClick: () -> Unit) {
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 選択モード時はチェックボックスを表示
+                    if (selectionMode) {
+                        Icon(
+                            imageVector = if (isSelected) {
+                                Icons.Filled.CheckCircle
+                            } else {
+                                Icons.Outlined.CheckCircle
+                            },
+                            contentDescription = if (isSelected) "選択済み" else "未選択",
+                            tint = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
                 }
             }
 
@@ -306,4 +412,34 @@ fun dumpSessionInfo(session: BatterySession) {
         android.util.Log.d("CommSession", "Radar Packets: ${session.radarPacketCount}")
     }
     android.util.Log.d("CommSession", "=======================================")
+}
+
+@Composable
+fun DeleteConfirmDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("選択した履歴を削除")
+        },
+        text = {
+            Text("${count}件の履歴を削除します。よろしいですか？")
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+            ) {
+                Text("削除")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        }
+    )
 }

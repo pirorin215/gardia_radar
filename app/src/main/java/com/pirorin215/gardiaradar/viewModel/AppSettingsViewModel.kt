@@ -42,6 +42,18 @@ class AppSettingsViewModel(
     val wearPowerSavingMode: StateFlow<Boolean> = repository.getFlow(Settings.WEAR_POWER_SAVING_MODE)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val rssiDisconnectEnabled: StateFlow<Boolean> = repository.getFlow(Settings.RSSI_DISCONNECT_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val rssiDisconnectThreshold: StateFlow<Int> = repository.getFlow(Settings.RSSI_DISCONNECT_THRESHOLD)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -90)
+
+    val rssiDisconnectCount: StateFlow<Int> = repository.getFlow(Settings.RSSI_DISCONNECT_COUNT)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 3)
+
+    val rssiConnectThreshold: StateFlow<Int> = repository.getFlow(Settings.RSSI_CONNECT_THRESHOLD)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -80)
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -82,5 +94,21 @@ class AppSettingsViewModel(
 
     fun saveWearPowerSavingMode(enabled: Boolean) {
         viewModelScope.launch { repository.setValue(Settings.WEAR_POWER_SAVING_MODE, enabled) }
+    }
+
+    fun saveRssiDisconnectEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.RSSI_DISCONNECT_ENABLED, enabled) }
+    }
+
+    fun saveRssiDisconnectThreshold(value: Int) {
+        viewModelScope.launch { repository.setValue(Settings.RSSI_DISCONNECT_THRESHOLD, value) }
+    }
+
+    fun saveRssiDisconnectCount(value: Int) {
+        viewModelScope.launch { repository.setValue(Settings.RSSI_DISCONNECT_COUNT, value) }
+    }
+
+    fun saveRssiConnectThreshold(value: Int) {
+        viewModelScope.launch { repository.setValue(Settings.RSSI_CONNECT_THRESHOLD, value) }
     }
 }

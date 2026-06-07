@@ -47,7 +47,7 @@ class RadarConnectionManager(
     companion object {
         private const val TAG = "RadarConnectionManager"
         private const val FORCE_RECONNECT_DELAY_MS = 2000L
-        private const val ERROR_RECONNECT_DELAY_MS = 3000L
+        private const val ERROR_RECONNECT_DELAY_MS = 1000L  // 3秒から1秒に短縮（GATT Error 133後の再接続を早める）
         private const val DISCONNECTED_RECONNECT_DELAY_MS = 1000L
     }
 
@@ -132,10 +132,28 @@ class RadarConnectionManager(
 
         // スキャン結果のデバイス受信
         scope.launch {
-            RadarScanServiceManager.deviceFoundFlow.collectLatest { device ->
-                Log.d(TAG, "Device found: ${device.name}")
+            RadarScanServiceManager.deviceFoundFlow.collectLatest { scanResult ->
+                val device = scanResult.device
+                val rssi = scanResult.rssi
+                Log.d(TAG, "Device found: ${device.name}, RSSI: ${rssi}dBm")
+
+                // RSSI表示を更新（接続しない場合でも表示）
+                repository.setRssi(rssi)
+
                 if (repository.connectionState.value is ConnectionState.Disconnected ||
                     repository.connectionState.value is ConnectionState.Scanning) {
+
+                    // 接続時のRSSIしきい値チェック
+                    val connectThreshold = appSettingsRepository.getFlow(Settings.RSSI_CONNECT_THRESHOLD).first()
+                    if (rssi < connectThreshold) {
+                        Log.w(TAG, "RSSI too low for connection: ${rssi}dBm (threshold: ${connectThreshold}dBm). Skipping connection.")
+                        // 接続をスキップした場合は再スキャンをトリガー（1秒後に再スキャン）
+                        delay(1000)
+                        RadarScanServiceManager.emitRestartScan()
+                        return@collectLatest
+                    }
+
+                    Log.d(TAG, "RSSI acceptable for connection: ${rssi}dBm (threshold: ${connectThreshold}dBm)")
                     repository.connect(device)
                 }
             }

@@ -70,6 +70,9 @@ class RadarRepository(
     private val _connectionElapsedSeconds = MutableStateFlow(0L)
     val connectionElapsedSeconds = _connectionElapsedSeconds.asStateFlow()
 
+    private val _rssi = MutableStateFlow<Int?>(null)
+    val rssi = _rssi.asStateFlow()
+
     val suppressionRemainingSeconds = notificationManager.suppressionRemainingSeconds
 
     private var batteryChar: BluetoothGattCharacteristic? = null
@@ -82,6 +85,18 @@ class RadarRepository(
     private var lastNotifiedTargetState = false
     private var lastTargetNotificationTime = 0L
     private val TARGET_NOTIFICATION_COOLDOWN_MS = 30_000L
+
+    // 接続監視タイマー（データ受信タイムアウト検知）
+    private var lastDataReceivedTime = 0L
+    private var connectionWatchdogJob: kotlinx.coroutines.Job? = null
+    private val CONNECTION_TIMEOUT_MS = 15_000L // 15秒間データ受信がない場合は切断とみなす
+
+    // RSSI読み取りタイマー
+    private var rssiReadJob: kotlinx.coroutines.Job? = null
+    private val RSSI_READ_INTERVAL_MS = 5000L // 5秒ごとにRSSIを読む
+
+    // RSSI切断ロジック
+    private var consecutivePoorRssiCount = 0 // RSSIがしきい値を下回った連続回数
 
     // 通信種別カウント（currentSessionとは独立して管理）
     @Volatile private var connectionStateCommCount = 0
@@ -161,17 +176,25 @@ class RadarRepository(
                 saveCurrentSession()
                 startConnectedSession()
                 startElapsedTimer()
+                startConnectionWatchdog()
+                startRssiReader()
             } else if (oldState is ConnectionState.Connected && state !is ConnectionState.Connected) {
                 // 切断: ONセッション保存 → OFFセッション開始
                 saveCurrentSession()
                 startDisconnectedSession()
                 stopElapsedTimer()
+                stopConnectionWatchdog()
+                stopRssiReader()
             }
         }
     }
 
     fun setConnectedDeviceName(name: String?) {
         _connectedDeviceName.value = name
+    }
+
+    fun setRssi(rssi: Int) {
+        _rssi.value = rssi
     }
 
     fun setWearBatteryLevel(level: Int) {
@@ -195,6 +218,7 @@ class RadarRepository(
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
         _wearBatteryLevel.value = -1
+        _rssi.value = null
         batteryChar = null
         lastNotifiedTargetState = false
         lastTargetNotificationTime = 0L
@@ -226,9 +250,12 @@ class RadarRepository(
         _rawPacket.value = ""
         _radarBatteryLevel.value = -1
         _wearBatteryLevel.value = -1
+        _rssi.value = null
         batteryChar = null
         notificationManager.handleBatteryUpdate(-1)
         stopElapsedTimer()
+        stopConnectionWatchdog()
+        stopRssiReader()
         _connectionElapsedSeconds.value = 0L
     }
 
@@ -345,6 +372,69 @@ class RadarRepository(
         elapsedTimerJob?.cancel()
         elapsedTimerJob = null
         Log.d(TAG, "Elapsed timer stopped")
+    }
+
+    private fun startConnectionWatchdog() {
+        lastDataReceivedTime = System.currentTimeMillis()
+        connectionWatchdogJob?.cancel()
+        connectionWatchdogJob = scope.launch {
+            try {
+                Log.d(TAG, "Connection watchdog loop started")
+                while (true) {
+                    delay(5000L) // 5秒ごとにチェック
+                    val now = System.currentTimeMillis()
+                    val elapsed = now - lastDataReceivedTime
+                    Log.d(TAG, "Watchdog check: elapsed=${elapsed}ms, timeout=${CONNECTION_TIMEOUT_MS}ms")
+
+                    if (elapsed > CONNECTION_TIMEOUT_MS) {
+                        Log.w(TAG, "Connection timeout: ${elapsed}ms without data. Forcing disconnect.")
+                        gatt?.disconnect()
+                        // disconnect()を呼んだ後はコールバックを待つ必要があるのでループを終了
+                        break
+                    }
+                }
+                Log.d(TAG, "Connection watchdog loop ended")
+            } catch (e: Exception) {
+                Log.e(TAG, "Watchdog exception: ${e.message}", e)
+            }
+        }
+        Log.d(TAG, "Connection watchdog started (timeout=${CONNECTION_TIMEOUT_MS}ms)")
+    }
+
+    private fun stopConnectionWatchdog() {
+        connectionWatchdogJob?.cancel()
+        connectionWatchdogJob = null
+        Log.d(TAG, "Connection watchdog stopped")
+    }
+
+    private fun startRssiReader() {
+        rssiReadJob?.cancel()
+        rssiReadJob = scope.launch {
+            try {
+                Log.d(TAG, "RSSI reader started")
+                while (gatt != null) {
+                    delay(RSSI_READ_INTERVAL_MS)
+                    gatt?.let {
+                        if (!it.readRemoteRssi()) {
+                            Log.w(TAG, "Failed to request RSSI read")
+                        }
+                    }
+                }
+                Log.d(TAG, "GATT is null, stopping RSSI reader")
+            } catch (e: Exception) {
+                Log.e(TAG, "RSSI reader exception: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun stopRssiReader() {
+        rssiReadJob?.cancel()
+        rssiReadJob = null
+        Log.d(TAG, "RSSI reader stopped")
+    }
+
+    private fun updateLastDataReceivedTime() {
+        lastDataReceivedTime = System.currentTimeMillis()
     }
 
     private fun formatTime(time: LocalDateTime): String {
@@ -490,6 +580,54 @@ class RadarRepository(
                 BATTERY_LEVEL_CHAR_UUID -> updateBatteryLevel(value, "notification")
             }
         }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.d(TAG, "onReadRemoteRssi: rssi=$rssi dBm")
+                _rssi.value = rssi
+
+                // RSSI切断ロジックをチェック
+                scope.launch {
+                    checkRssiDisconnect(rssi)
+                }
+            } else {
+                Log.w(TAG, "onReadRemoteRssi failed: status=$status")
+            }
+        }
+    }
+
+    /**
+     * RSSIに基づく自動切断判定を実行します。
+     * 接続後のRSSI監視用で、切断時のしきい値（RSSI_DISCONNECT_THRESHOLD）を使用します。
+     * 接続時のフィルタリングは RadarConnectionManager で行われます。
+     */
+    private suspend fun checkRssiDisconnect(currentRssi: Int) {
+        // 設定を取得
+        val enabled = appSettingsRepository.getFlow(Settings.RSSI_DISCONNECT_ENABLED).first()
+        if (!enabled) {
+            consecutivePoorRssiCount = 0
+            return
+        }
+
+        val threshold = appSettingsRepository.getFlow(Settings.RSSI_DISCONNECT_THRESHOLD).first()
+        val requiredCount = appSettingsRepository.getFlow(Settings.RSSI_DISCONNECT_COUNT).first()
+
+        if (currentRssi < threshold) {
+            consecutivePoorRssiCount++
+            Log.w(TAG, "Poor RSSI: $currentRssi dBm (threshold: $threshold dBm, count: $consecutivePoorRssiCount/$requiredCount)")
+
+            if (consecutivePoorRssiCount >= requiredCount) {
+                Log.e(TAG, "RSSI too poor for $requiredCount consecutive times. Disconnecting...")
+                consecutivePoorRssiCount = 0
+                gatt?.disconnect()
+            }
+        } else {
+            // RSSIが改善した場合はカウントをリセット
+            if (consecutivePoorRssiCount > 0) {
+                Log.d(TAG, "RSSI improved: $currentRssi dBm (threshold: $threshold dBm). Resetting count.")
+                consecutivePoorRssiCount = 0
+            }
+        }
     }
 
     private fun enableNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
@@ -513,6 +651,7 @@ class RadarRepository(
 
     private fun updateBatteryLevel(value: ByteArray, source: String) {
         if (value.isNotEmpty()) {
+            updateLastDataReceivedTime()
             val level = value[0].toInt() and 0xFF
             val hex = value.joinToString(" ") { "%02x".format(it) }
             Log.d(TAG, "Radar battery level: $level% (source=$source, raw=[$hex], ${value.size} bytes)")
@@ -536,6 +675,8 @@ class RadarRepository(
 
     private fun decodeRadarData(data: ByteArray) {
         if (data.isEmpty()) return
+
+        updateLastDataReceivedTime()
 
         // レーダーパケット受信回数をカウント
         currentSession?.let { session ->

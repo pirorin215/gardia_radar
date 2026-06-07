@@ -218,10 +218,10 @@ class RadarScanService : Service() {
             }
 
             if (isTarget) {
-                Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found! Signaling connect.")
+                Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found! RSSI: ${result.rssi}dBm. Signaling connect.")
                 stopBleScan()
                 CoroutineScope(Dispatchers.IO).launch {
-                    RadarScanServiceManager.emitDeviceFound(result.device)
+                    RadarScanServiceManager.emitDeviceFound(result)
                 }
             }
         }
@@ -237,10 +237,10 @@ class RadarScanService : Service() {
                     deviceName.contains("Gardia", ignoreCase = true) || deviceName.contains("R300L", ignoreCase = true)
                 }
                 if (isTarget) {
-                    Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found in batch!")
+                    Log.d(TAG, "Target device '$deviceName' (${result.device.address}) found in batch! RSSI: ${result.rssi}dBm")
                     stopBleScan()
                     CoroutineScope(Dispatchers.IO).launch {
-                        RadarScanServiceManager.emitDeviceFound(result.device)
+                        RadarScanServiceManager.emitDeviceFound(result)
                     }
                     return
                 }

@@ -42,6 +42,7 @@ fun MainScreen(
     val wearBatteryLevel by viewModel.wearBatteryLevel.collectAsState()
     val suppressionRemaining by viewModel.suppressionRemainingSeconds.collectAsState()
     val connectionElapsedSeconds by viewModel.connectionElapsedSeconds.collectAsState()
+    val rssi by viewModel.rssi.collectAsState()
 
     // Convert seconds to HH:MM:SS format
     val elapsedTimeString = remember(connectionElapsedSeconds) {
@@ -109,46 +110,12 @@ fun MainScreen(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 接続経過時間、レーダーバッテリ残量、ウォッチバッテリ残量
+                // 接続状態、接続時間、RSSI
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    // 接続経過時間
-                    if (connectionState is ConnectionState.Connected) {
-                        Text(
-                            text = "⏱ $elapsedTimeString",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                    }
-
-                    // レーダー電池残量
-                    Text(
-                        text = "📡 ${if (radarBatteryLevel >= 0) "$radarBatteryLevel%" else "--%"}",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    // ウォッチ電池残量
-                    Text(
-                        text = "⌚ ${if (wearBatteryLevel >= 0) "$wearBatteryLevel%" else "--%"}",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                // Connection Status and Reconnect Button (Always visible)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
+                    // 接続状態
                     val statusColor = when (connectionState) {
                         is ConnectionState.Connected -> Color(0xFF00C853)
                         is ConnectionState.Disconnected -> Color(0xFFFF1744)
@@ -168,7 +135,64 @@ fun MainScreen(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
+
                     Spacer(modifier = Modifier.width(16.dp))
+
+                    // 接続経過時間
+                    if (connectionState is ConnectionState.Connected) {
+                        Text(
+                            text = "⏱ $elapsedTimeString",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
+
+                    // RSSI表示
+                    val rssiText = rssi?.let { "${it}dBm" } ?: "--dBm"
+                    val rssiValue = rssi
+                    val rssiColor = when {
+                        rssiValue == null -> Color.Gray
+                        rssiValue >= -50 -> Color(0xFF00C853) // 緑：強い
+                        rssiValue >= -60 -> Color(0xFF64DD17) // 緑
+                        rssiValue >= -70 -> Color(0xFFFFD600) // 黄：普通
+                        rssiValue >= -80 -> Orange // オレンジ：弱い
+                        else -> Color(0xFFFF1744) // 赤：非常に弱い
+                    }
+                    Text(
+                        text = "📶 $rssiText",
+                        color = rssiColor,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // ウォッチ電池残量、レーダー電池残量、再接続ボタン
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    // ウォッチ電池残量
+                    Text(
+                        text = "⌚ ${if (wearBatteryLevel >= 0) "$wearBatteryLevel%" else "--%"}",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // レーダー電池残量
+                    Text(
+                        text = "📡 ${if (radarBatteryLevel >= 0) "$radarBatteryLevel%" else "--%"}",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
                     Button(
                         onClick = { viewModel.forceReconnect() },
                         enabled = connectionState !is ConnectionState.Scanning && connectionState !is ConnectionState.Connecting,

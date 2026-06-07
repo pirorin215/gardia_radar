@@ -76,6 +76,26 @@ object Settings {
         preferencesKey = booleanPreferencesKey("wear_power_saving_mode"),
         defaultValue = false
     )
+
+    val RSSI_DISCONNECT_ENABLED = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("rssi_disconnect_enabled"),
+        defaultValue = false
+    )
+
+    val RSSI_DISCONNECT_THRESHOLD = SettingKey.Direct(
+        preferencesKey = intPreferencesKey("rssi_disconnect_threshold"),
+        defaultValue = -90 // -90dBm
+    )
+
+    val RSSI_DISCONNECT_COUNT = SettingKey.Direct(
+        preferencesKey = intPreferencesKey("rssi_disconnect_count"),
+        defaultValue = 3 // 3回連続で切断（15秒）
+    )
+
+    val RSSI_CONNECT_THRESHOLD = SettingKey.Direct(
+        preferencesKey = intPreferencesKey("rssi_connect_threshold"),
+        defaultValue = -80 // -80dBm（接続時のしきい値）
+    )
 }
 
 class AppSettingsRepository(private val context: Context) {
