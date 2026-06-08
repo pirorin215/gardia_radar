@@ -112,4 +112,22 @@ class WearableDataHost(
             }
         }
     }
+
+    fun putAlertSettingsData(soundEnabled: Boolean, vibrationEnabled: Boolean) {
+        val putDataMapRequest = PutDataMapRequest.create("/alert-settings")
+        putDataMapRequest.dataMap.putBoolean("soundEnabled", soundEnabled)
+        putDataMapRequest.dataMap.putBoolean("vibrationEnabled", vibrationEnabled)
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Alert settings hosted: sound=$soundEnabled, vibration=$vibrationEnabled")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host alert settings", e)
+            }
+        }
+    }
 }

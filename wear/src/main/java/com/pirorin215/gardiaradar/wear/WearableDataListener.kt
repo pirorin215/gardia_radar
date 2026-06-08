@@ -9,7 +9,6 @@ import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEvent
@@ -34,9 +33,14 @@ class WearableDataListener : WearableListenerService() {
         const val PREF_KEY_POWER_SAVING = "powerSavingMode"
         const val PREF_KEY_LAST_BATTERY_LEVEL = "lastSentBatteryLevel"
         const val PREF_KEY_LAST_BATTERY_TIME = "lastSentBatteryTime"
+        const val PREF_KEY_ALERT_SOUND_ENABLED = "alertSoundEnabled"
+        const val PREF_KEY_ALERT_VIBRATION_ENABLED = "alertVibrationEnabled"
     }
 
     private var lastTargetsUpdateTime = 0L
+
+    // Vibratorキャッシュ（効率性改善）
+    private val vibrator: Vibrator? by lazy { systemVibrator() }
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         try {
@@ -56,6 +60,9 @@ class WearableDataListener : WearableListenerService() {
                         }
                         "/power-saving-mode" -> {
                             handlePowerSavingUpdate(dataMap)
+                        }
+                        "/alert-settings" -> {
+                            handleAlertSettingsUpdate(dataMap)
                         }
                     }
                 }
@@ -160,6 +167,16 @@ class WearableDataListener : WearableListenerService() {
         sendWatchBatteryToPhone(force = true)
     }
 
+    private fun handleAlertSettingsUpdate(dataMap: DataMap) {
+        val soundEnabled = dataMap.getBoolean("soundEnabled", true)
+        val vibrationEnabled = dataMap.getBoolean("vibrationEnabled", true)
+        Log.d(TAG, "Alert settings received: sound=$soundEnabled, vibration=$vibrationEnabled")
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean(PREF_KEY_ALERT_SOUND_ENABLED, soundEnabled)
+            .putBoolean(PREF_KEY_ALERT_VIBRATION_ENABLED, vibrationEnabled)
+            .apply()
+    }
+
     private fun sendWatchBatteryToPhone(force: Boolean) {
         try {
             val batteryStatus: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -195,32 +212,32 @@ class WearableDataListener : WearableListenerService() {
     }
 
     private fun playConnectionFeedback(isConnected: Boolean) {
-        val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vm.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
+        // 音・振動設定を確認
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val soundEnabled = prefs.getBoolean(PREF_KEY_ALERT_SOUND_ENABLED, true)
+        val vibrationEnabled = prefs.getBoolean(PREF_KEY_ALERT_VIBRATION_ENABLED, true)
 
-        if (isConnected) {
-            val effect = VibrationEffect.createWaveform(longArrayOf(0, 100, 100, 100), intArrayOf(0, 200, 0, 200), -1)
-            vibrator?.vibrate(effect)
-        } else {
-            val effect = VibrationEffect.createWaveform(longArrayOf(0, 300), intArrayOf(0, 255), -1)
-            vibrator?.vibrate(effect)
-        }
-
-        try {
-            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-            if (isConnected) {
-                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+        if (vibrationEnabled) {
+            val effect = if (isConnected) {
+                VibrationEffect.createWaveform(longArrayOf(0, 100, 100, 100), intArrayOf(0, 200, 0, 200), -1)
             } else {
-                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP2, 400)
+                VibrationEffect.createWaveform(longArrayOf(0, 300), intArrayOf(0, 255), -1)
             }
-            toneGen.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play connection sound", e)
+            vibrator?.vibrate(effect)
+        }
+
+        if (soundEnabled) {
+            try {
+                val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                if (isConnected) {
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                } else {
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP2, 400)
+                }
+                toneGen.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to play connection sound", e)
+            }
         }
     }
 

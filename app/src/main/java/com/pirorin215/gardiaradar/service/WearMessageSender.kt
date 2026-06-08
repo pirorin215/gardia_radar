@@ -19,7 +19,6 @@ class WearMessageSender(
     companion object {
         private const val TAG = "WearMessageSender"
         const val PATH_RADAR_ALERT = "/radar-alert"
-        const val PATH_RADAR_CLEAR = "/radar-clear"
     }
 
     private val messageClient: MessageClient = Wearable.getMessageClient(context)
@@ -67,25 +66,4 @@ class WearMessageSender(
         }
     }
 
-    /**
-     * ターゲット消失時にWatchへクリア送信
-     */
-    fun sendRadarClear() {
-        scope.launch {
-            try {
-                val nodes = nodeClient.connectedNodes.await()
-                if (nodes.isEmpty()) return@launch
-
-                val data = "{}".toByteArray(Charsets.UTF_8)
-                nodes.forEach { node ->
-                    messageClient.sendMessage(node.id, PATH_RADAR_CLEAR, data)
-                        .addOnFailureListener { e ->
-                            Log.w(TAG, "Failed clear to ${node.displayName}", e)
-                        }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending clear to wear", e)
-            }
-        }
-    }
 }

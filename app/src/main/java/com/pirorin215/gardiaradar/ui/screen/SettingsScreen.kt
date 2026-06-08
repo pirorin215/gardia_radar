@@ -1,5 +1,6 @@
 package com.pirorin215.gardiaradar.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,11 +10,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.ThemeMode
 import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
@@ -29,7 +38,6 @@ fun SettingsScreen(
     val currentThemeMode by viewModel.themeMode.collectAsState()
     val phoneNotificationMode by viewModel.phoneNotificationMode.collectAsState()
     val wearNotificationMode by viewModel.wearNotificationMode.collectAsState()
-    val useFullScreenNotification by viewModel.useFullScreenNotification.collectAsState()
     val clearSuppressionSeconds by viewModel.clearSuppressionSeconds.collectAsState()
     val radarLowBatteryThreshold by viewModel.radarLowBatteryThreshold.collectAsState()
     val targetDeviceAddress by viewModel.targetDeviceAddress.collectAsState()
@@ -39,6 +47,11 @@ fun SettingsScreen(
     val rssiConnectThreshold by viewModel.rssiConnectThreshold.collectAsState()
     val rssiDisconnectThreshold by viewModel.rssiDisconnectThreshold.collectAsState()
     val rssiDisconnectCount by viewModel.rssiDisconnectCount.collectAsState()
+    val phoneAlertSoundEnabled by viewModel.phoneAlertSoundEnabled.collectAsState()
+    val phoneAlertVibrationEnabled by viewModel.phoneAlertVibrationEnabled.collectAsState()
+    val wearAlertSoundEnabled by viewModel.wearAlertSoundEnabled.collectAsState()
+    val wearAlertVibrationEnabled by viewModel.wearAlertVibrationEnabled.collectAsState()
+    val phoneAlertSoundName by viewModel.phoneAlertSoundName.collectAsState()
 
     Scaffold(
         topBar = {
@@ -96,6 +109,95 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Phone sound/vibration toggles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("サウンド (スマホ)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "車両検知時に音を鳴らします",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = phoneAlertSoundEnabled,
+                    onCheckedChange = { viewModel.savePhoneAlertSoundEnabled(it) }
+                )
+            }
+
+            // アラート音選択
+            val context = LocalContext.current
+            val ringtonePickerLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                    if (uri != null) {
+                        val ringtone = RingtoneManager.getRingtone(context, uri)
+                        val name = ringtone?.getTitle(context) ?: "デフォルト"
+                        viewModel.savePhoneAlertSound(uri.toString(), name)
+                    } else {
+                        viewModel.savePhoneAlertSound("", "デフォルト")
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_NOTIFICATION)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "アラート音を選択")
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                            val currentUri = viewModel.phoneAlertSoundUri.value
+                            if (currentUri.isNotEmpty()) {
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(currentUri))
+                            }
+                        }
+                        ringtonePickerLauncher.launch(intent)
+                    }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("アラート音", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        phoneAlertSoundName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text("選択 ▸", color = Orange, fontSize = 14.sp)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("振動 (スマホ)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "車両検知時に振動します",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = phoneAlertVibrationEnabled,
+                    onCheckedChange = { viewModel.savePhoneAlertVibrationEnabled(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // --- Wear OS Notifications ---
             Text("ウォッチ(Wear OS)の通知設定", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
@@ -120,23 +222,42 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Fullscreen notification toggle
+            // Wear OS sound/vibration toggles
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("全画面通知 (スマホ)", style = MaterialTheme.typography.bodyMedium)
+                    Text("サウンド (ウォッチ)", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "ロック画面などで全画面の警告を表示します",
+                        "アラート・接続フィードバック時に音を鳴らします",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
-                    checked = useFullScreenNotification,
-                    onCheckedChange = { viewModel.saveFullScreenNotification(it) }
+                    checked = wearAlertSoundEnabled,
+                    onCheckedChange = { viewModel.saveWearAlertSoundEnabled(it) }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("振動 (ウォッチ)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "アラート・接続フィードバック時に振動します",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = wearAlertVibrationEnabled,
+                    onCheckedChange = { viewModel.saveWearAlertVibrationEnabled(it) }
                 )
             }
 

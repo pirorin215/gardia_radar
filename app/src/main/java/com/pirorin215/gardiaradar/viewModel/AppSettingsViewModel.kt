@@ -24,9 +24,6 @@ class AppSettingsViewModel(
     val wearNotificationMode: StateFlow<NotificationMode> = repository.getFlow(Settings.WEAR_NOTIFICATION_MODE)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationMode.FIRST_ONLY)
 
-    val useFullScreenNotification: StateFlow<Boolean> = repository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
     val clearSuppressionSeconds: StateFlow<Int> = repository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 10)
 
@@ -54,6 +51,24 @@ class AppSettingsViewModel(
     val rssiConnectThreshold: StateFlow<Int> = repository.getFlow(Settings.RSSI_CONNECT_THRESHOLD)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -80)
 
+    val phoneAlertSoundEnabled: StateFlow<Boolean> = repository.getFlow(Settings.PHONE_ALERT_SOUND_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val phoneAlertVibrationEnabled: StateFlow<Boolean> = repository.getFlow(Settings.PHONE_ALERT_VIBRATION_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val wearAlertSoundEnabled: StateFlow<Boolean> = repository.getFlow(Settings.WEAR_ALERT_SOUND_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val wearAlertVibrationEnabled: StateFlow<Boolean> = repository.getFlow(Settings.WEAR_ALERT_VIBRATION_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val phoneAlertSoundUri: StateFlow<String> = repository.getFlow(Settings.PHONE_ALERT_SOUND_URI)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val phoneAlertSoundName: StateFlow<String> = repository.getFlow(Settings.PHONE_ALERT_SOUND_NAME)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "デフォルト")
+
     fun saveThemeMode(mode: ThemeMode) {
         viewModelScope.launch { repository.setValue(Settings.THEME_MODE, mode) }
     }
@@ -64,10 +79,6 @@ class AppSettingsViewModel(
 
     fun saveWearNotificationMode(mode: NotificationMode) {
         viewModelScope.launch { repository.setValue(Settings.WEAR_NOTIFICATION_MODE, mode) }
-    }
-
-    fun saveFullScreenNotification(enabled: Boolean) {
-        viewModelScope.launch { repository.setValue(Settings.USE_FULLSCREEN_NOTIFICATION, enabled) }
     }
 
     fun saveClearSuppressionSeconds(seconds: Int) {
@@ -110,5 +121,28 @@ class AppSettingsViewModel(
 
     fun saveRssiConnectThreshold(value: Int) {
         viewModelScope.launch { repository.setValue(Settings.RSSI_CONNECT_THRESHOLD, value) }
+    }
+
+    fun savePhoneAlertSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.PHONE_ALERT_SOUND_ENABLED, enabled) }
+    }
+
+    fun savePhoneAlertVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.PHONE_ALERT_VIBRATION_ENABLED, enabled) }
+    }
+
+    fun saveWearAlertSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.WEAR_ALERT_SOUND_ENABLED, enabled) }
+    }
+
+    fun saveWearAlertVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setValue(Settings.WEAR_ALERT_VIBRATION_ENABLED, enabled) }
+    }
+
+    fun savePhoneAlertSound(uri: String, name: String) {
+        viewModelScope.launch {
+            repository.setValue(Settings.PHONE_ALERT_SOUND_URI, uri)
+            repository.setValue(Settings.PHONE_ALERT_SOUND_NAME, name)
+        }
     }
 }

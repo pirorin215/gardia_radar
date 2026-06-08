@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -131,6 +132,18 @@ class RadarRepository(
                         session.copy(wasNormalMode = true)
                     }
                 }
+            }
+        }
+
+        // ウォッチの音・振動設定変更を監視して同期
+        scope.launch {
+            kotlinx.coroutines.flow.combine(
+                appSettingsRepository.getFlow(Settings.WEAR_ALERT_SOUND_ENABLED),
+                appSettingsRepository.getFlow(Settings.WEAR_ALERT_VIBRATION_ENABLED)
+            ) { soundEnabled, vibrationEnabled ->
+                soundEnabled to vibrationEnabled
+            }.distinctUntilChanged().collectLatest { (soundEnabled, vibrationEnabled) ->
+                wearableDataHost.putAlertSettingsData(soundEnabled, vibrationEnabled)
             }
         }
     }

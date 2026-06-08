@@ -1,20 +1,27 @@
 package com.pirorin215.gardiaradar.service
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pirorin215.gardiaradar.MainActivity
-import com.pirorin215.gardiaradar.R
 import com.pirorin215.gardiaradar.data.AppSettingsRepository
 import com.pirorin215.gardiaradar.data.NotificationMode
 import com.pirorin215.gardiaradar.data.RadarTarget
 import com.pirorin215.gardiaradar.data.Settings
+import com.pirorin215.gardiaradar.util.systemVibrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -23,7 +30,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import android.util.Log
 
 class RadarNotificationManager(
     private val context: Context,
@@ -34,9 +40,7 @@ class RadarNotificationManager(
     private val TAG = "RadarNotificationManager"
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val CHANNEL_ID = "radar_alerts_v7"
     private val LOW_BATTERY_CHANNEL_ID = "radar_low_battery"
-    val NOTIFICATION_ID = 1001
     private val LOW_BATTERY_NOTIFICATION_ID = 1002
     private var lastTargetCount = 0
     private var lowBatteryNotified = false
@@ -52,33 +56,36 @@ class RadarNotificationManager(
     private var periodicNotificationJob: Job? = null
     private var currentTargets: List<RadarTarget> = emptyList()
 
-    // Strong vibration pattern
-    private val VIBRATION_PATTERN = longArrayOf(0, 1000, 200, 1000, 200, 1000)
+    // 音・振動
+    private val handler = Handler(Looper.getMainLooper())
+    private var mediaPlayer: MediaPlayer? = null
+    private val alertTimeoutRunnable = Runnable { stopAlertSound() }
+    private val vibrator: Vibrator? = context.systemVibrator()
+
+    private val vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+    private val vibrationAmplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
+    private val vibrationEffect = VibrationEffect.createWaveform(vibrationPattern, vibrationAmplitudes, -1)
+
+    // 設定値キャッシュ（パフォーマンス改善）
+    private var cachedPhoneAlertSoundEnabled = true
+    private var cachedPhoneAlertVibrationEnabled = true
+    private var cachedPhoneAlertSoundUri = ""
 
     init {
-        createNotificationChannel()
         createLowBatteryChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Radar Incoming Alert"
-            val descriptionText = "Vehicle detection alerts"
-            val importance = NotificationManager.IMPORTANCE_HIGH
-
-            val audioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .build()
-
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-                enableVibration(true)
-                vibrationPattern = VIBRATION_PATTERN
-                setSound(null, audioAttributes)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+        // 設定値をキャッシュに読み込み
+        scope.launch {
+            kotlinx.coroutines.flow.combine(
+                appSettingsRepository.getFlow(Settings.PHONE_ALERT_SOUND_ENABLED),
+                appSettingsRepository.getFlow(Settings.PHONE_ALERT_VIBRATION_ENABLED),
+                appSettingsRepository.getFlow(Settings.PHONE_ALERT_SOUND_URI)
+            ) { soundEnabled, vibrationEnabled, soundUri ->
+                Triple(soundEnabled, vibrationEnabled, soundUri)
+            }.collect { (soundEnabled, vibrationEnabled, soundUri) ->
+                cachedPhoneAlertSoundEnabled = soundEnabled
+                cachedPhoneAlertVibrationEnabled = vibrationEnabled
+                cachedPhoneAlertSoundUri = soundUri
             }
-            notificationManager.createNotificationChannel(channel)
         }
     }
 
@@ -146,9 +153,9 @@ class RadarNotificationManager(
         // EVERY_TIMEモードの定期通知制御
         val isEveryTimeMode = phoneMode == NotificationMode.EVERY_TIME || wearMode == NotificationMode.EVERY_TIME
         if (currentCount > 0 && isEveryTimeMode) {
-            startPeriodicNotification(phoneMode, wearMode)
+            startPeriodicAlert(phoneMode, wearMode)
         } else {
-            stopPeriodicNotification()
+            stopPeriodicAlert()
         }
 
         processNotifications(targets, phoneMode, wearMode, currentCount, true)
@@ -162,50 +169,35 @@ class RadarNotificationManager(
     }
 
     private fun processNotifications(targets: List<RadarTarget>, phoneMode: NotificationMode, wearMode: NotificationMode, currentCount: Int, withLogging: Boolean) {
-        // Handle phone notifications
+        // Handle phone alerts
         if (phoneMode == NotificationMode.OFF) {
-            notificationManager.cancel(NOTIFICATION_ID)
-            if (withLogging) Log.d(TAG, "Phone: OFF - notification cancelled")
+            if (withLogging) Log.d(TAG, "Phone: OFF")
         } else if (currentCount > 0) {
             when (phoneMode) {
                 NotificationMode.FIRST_ONLY -> {
                     if (lastTargetCount == 0) {
-                        if (withLogging) Log.d(TAG, "Phone: FIRST_ONLY - sending notification")
-                        sendNotification(
-                            "Vehicle Detected!",
-                            "Distance: ${targets[0].distance}m"
-                        )
+                        if (withLogging) Log.d(TAG, "Phone: FIRST_ONLY - playing alert")
+                        playPhoneAlert()
                     } else if (withLogging) {
-                        Log.d(TAG, "Phone: FIRST_ONLY - skipping (already notified)")
+                        Log.d(TAG, "Phone: FIRST_ONLY - skipping (already alerted)")
                     }
                 }
                 NotificationMode.EVERY_TIME -> {
                     // 初期検知時のみ通知（定期通知は別途開始）
                     if (lastTargetCount == 0) {
-                        if (withLogging) Log.d(TAG, "Phone: EVERY_TIME - initial notification")
-                        sendNotification(
-                            "Vehicle Detected!",
-                            "Distance: ${targets[0].distance}m"
-                        )
+                        if (withLogging) Log.d(TAG, "Phone: EVERY_TIME - initial alert")
+                        playPhoneAlert()
                     } else if (withLogging) {
-                        Log.d(TAG, "Phone: EVERY_TIME - periodic notification active")
+                        Log.d(TAG, "Phone: EVERY_TIME - periodic alert active")
                     }
                 }
                 else -> {}
-            }
-        } else {
-            if (lastTargetCount > 0) {
-                if (withLogging) Log.d(TAG, "Phone: targets cleared - cancelling notification")
-                notificationManager.cancel(NOTIFICATION_ID)
             }
         }
 
         // Handle Wear notifications
         if (wearMode == NotificationMode.OFF) {
-            if (lastTargetCount > 0 && currentCount == 0) {
-                if (withLogging) Log.d(TAG, "Wear: OFF - sending clear")
-                wearMessageSender.sendRadarClear()
-            }
+            // Wear通知OFF時は何もしない
         } else if (currentCount > 0) {
             when (wearMode) {
                 NotificationMode.FIRST_ONLY -> {
@@ -228,82 +220,81 @@ class RadarNotificationManager(
                 else -> {}
             }
         } else {
-            if (lastTargetCount > 0) {
-                if (withLogging) Log.d(TAG, "Wear: targets cleared - sending clear")
-                wearMessageSender.sendRadarClear()
+            // ウォッチ側の車列表示はData Layer (/radar-targets) で自動クリアされるため
+            // clear送信は不要
+        }
+    }
+
+    /**
+     * スマホでアラートを直接再生（通知は表示しない）
+     * @param sound trueなら音も再生（初回アラート）、falseなら振動のみ（定期アラート）
+     */
+    private fun playPhoneAlert(sound: Boolean = true) {
+        if (sound && cachedPhoneAlertSoundEnabled) {
+            playAlertSound()
+        }
+
+        if (cachedPhoneAlertVibrationEnabled) {
+            vibrator?.vibrate(vibrationEffect)
+        }
+    }
+
+    private fun playAlertSound() {
+        stopAlertSound()
+        try {
+            val alarmUri: Uri = if (cachedPhoneAlertSoundUri.isNotEmpty()) {
+                Uri.parse(cachedPhoneAlertSoundUri)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    ?: return
             }
+
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .build()
+                )
+                setDataSource(context, alarmUri)
+                isLooping = false
+                prepare()
+                start()
+            }
+
+            // 4秒後に自動停止（ウォッチと同じ）
+            handler.postDelayed(alertTimeoutRunnable, 4000L)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play alert sound", e)
         }
     }
 
-    private fun sendNotification(title: String, text: String) {
-        // Get fullscreen notification setting
-        val useFullScreenNotification = runBlocking {
-            appSettingsRepository.getFlow(Settings.USE_FULLSCREEN_NOTIFICATION)
-                .first()
+    private fun stopAlertSound() {
+        handler.removeCallbacks(alertTimeoutRunnable)
+        mediaPlayer?.let {
+            if (it.isPlaying) it.stop()
+            it.release()
         }
-
-        // Content intent → opens app
-        val contentIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentPendingIntent = PendingIntent.getActivity(
-            context, 0, contentIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        // Dismiss intent → cancels notification
-        val dismissIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
-            action = NotificationDismissReceiver.ACTION_DISMISS
-            putExtra(NotificationDismissReceiver.EXTRA_NOTIFICATION_ID, NOTIFICATION_ID)
-        }
-        val dismissPendingIntent = PendingIntent.getBroadcast(
-            context, 1, dismissIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_alert)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setContentIntent(contentPendingIntent)
-            .setAutoCancel(true)
-            .setOngoing(false)
-            .setOnlyAlertOnce(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .extend(NotificationCompat.WearableExtender())
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Dismiss",
-                dismissPendingIntent
-            )
-
-        // Fullscreen notification if enabled
-        if (useFullScreenNotification) {
-            builder.setFullScreenIntent(contentPendingIntent, true)
-        }
-
-        val notification = builder.build()
-
-        notificationManager.notify(NOTIFICATION_ID, notification)
+        mediaPlayer = null
     }
 
-    private fun startPeriodicNotification(phoneMode: NotificationMode, wearMode: NotificationMode) {
-        stopPeriodicNotification() // 既存のジョブをキャンセル
+    private fun startPeriodicAlert(phoneMode: NotificationMode, wearMode: NotificationMode) {
+        stopPeriodicAlert()
 
         periodicNotificationJob = notificationScope.launch {
             while (true) {
-                delay(1000) // 1秒待機
+                delay(1000)
 
                 if (currentTargets.isNotEmpty()) {
-                    // Phone通知
+                    // Phone: 定期アラートは振動のみ（音は初回のみ）
                     if (phoneMode == NotificationMode.EVERY_TIME) {
-                        sendNotification(
-                            "Vehicle Approaching!",
-                            "${currentTargets.size} vehicle(s) - ${currentTargets[0].distance}m"
-                        )
-                        Log.d(TAG, "Periodic: Phone notification sent")
+                        playPhoneAlert(sound = false)
+                        Log.d(TAG, "Periodic: Phone vibration")
                     }
 
                     // Wear通知
@@ -314,13 +305,12 @@ class RadarNotificationManager(
                 }
             }
         }
-        Log.d(TAG, "Periodic notification started")
+        Log.d(TAG, "Periodic alert started")
     }
 
-    private fun stopPeriodicNotification() {
+    private fun stopPeriodicAlert() {
         periodicNotificationJob?.cancel()
         periodicNotificationJob = null
-        Log.d(TAG, "Periodic notification stopped")
     }
 
     private fun startSuppressionCountdown() {
@@ -343,7 +333,6 @@ class RadarNotificationManager(
 
     fun handleBatteryUpdate(level: Int) {
         if (level < 0) {
-            // 不明な場合は通知をクリア
             if (lowBatteryNotified) {
                 notificationManager.cancel(LOW_BATTERY_NOTIFICATION_ID)
                 lowBatteryNotified = false

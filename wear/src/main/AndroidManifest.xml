@@ -25,13 +25,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".RadarAlertActivity"
-            android:exported="false"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true"
-            android:showWhenLocked="true" />
-
         <service
             android:name=".RadarListenerService"
             android:exported="true">

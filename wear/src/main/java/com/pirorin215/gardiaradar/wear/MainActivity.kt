@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
         // 少し遅延させてからBroadcastを送る
         handler.postDelayed({
             val intent = Intent(RadarListenerService.ACTION_DEBUG_ALERT).apply {
-                putExtra(RadarListenerService.EXTRA_ALERT_JSON, "{\"targetCount\":1,\"targets\":[{\"id\":1,\"distance\":100,\"speed\":30,\"threat\":1}]}")
+                putExtra("alert_json", "{\"targetCount\":1,\"targets\":[{\"id\":1,\"distance\":100,\"speed\":30,\"threat\":1}]}")
             }
             sendBroadcast(intent)
             Log.d("MainActivity", "Broadcast sent")

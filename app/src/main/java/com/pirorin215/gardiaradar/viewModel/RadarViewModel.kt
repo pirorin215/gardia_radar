@@ -1,14 +1,23 @@
 package com.pirorin215.gardiaradar.viewModel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.pirorin215.gardiaradar.data.AppSettingsRepository
 import com.pirorin215.gardiaradar.data.BatterySessionRepository
+import com.pirorin215.gardiaradar.data.RadarTarget
+import com.pirorin215.gardiaradar.data.Settings
+import com.pirorin215.gardiaradar.service.RadarNotificationManager
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.pirorin215.gardiaradar.data.ConnectionState
 import com.pirorin215.gardiaradar.data.RadarRepository
 
 class RadarViewModel(
     private val repository: RadarRepository,
     private val connectionManager: RadarConnectionManager,
-    private val batterySessionRepository: BatterySessionRepository
+    private val batterySessionRepository: BatterySessionRepository,
+    private val notificationManager: RadarNotificationManager,
+    private val appSettingsRepository: AppSettingsRepository
 ) : ViewModel() {
     val connectionState = repository.connectionState
     val connectedDeviceName = repository.connectedDeviceName
@@ -39,5 +48,16 @@ class RadarViewModel(
 
     fun deleteSessions(sessionIds: List<String>) {
         batterySessionRepository.deleteSessions(sessionIds)
+    }
+
+    fun triggerDebugAlert() {
+        viewModelScope.launch {
+            val fakeTargets = listOf(
+                RadarTarget(id = 1, distance = 80, speed = 30, threat = 1)
+            )
+            val phoneMode = appSettingsRepository.getFlow(Settings.PHONE_NOTIFICATION_MODE).first()
+            val wearMode = appSettingsRepository.getFlow(Settings.WEAR_NOTIFICATION_MODE).first()
+            notificationManager.handleRadarUpdate(fakeTargets, phoneMode, wearMode)
+        }
     }
 }

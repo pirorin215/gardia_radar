@@ -47,11 +47,6 @@ object Settings {
         fromStored = { NotificationMode.valueOf(it) }
     )
 
-    val USE_FULLSCREEN_NOTIFICATION = SettingKey.Direct(
-        preferencesKey = booleanPreferencesKey("use_fullscreen_notification"),
-        defaultValue = false
-    )
-
     val CLEAR_SUPPRESSION_SECONDS = SettingKey.Direct(
         preferencesKey = intPreferencesKey("clear_suppression_seconds"),
         defaultValue = 10
@@ -95,6 +90,36 @@ object Settings {
     val RSSI_CONNECT_THRESHOLD = SettingKey.Direct(
         preferencesKey = intPreferencesKey("rssi_connect_threshold"),
         defaultValue = -80 // -80dBm（接続時のしきい値）
+    )
+
+    val PHONE_ALERT_SOUND_ENABLED = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("phone_alert_sound_enabled"),
+        defaultValue = true
+    )
+
+    val PHONE_ALERT_VIBRATION_ENABLED = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("phone_alert_vibration_enabled"),
+        defaultValue = true
+    )
+
+    val WEAR_ALERT_SOUND_ENABLED = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("wear_alert_sound_enabled"),
+        defaultValue = true
+    )
+
+    val WEAR_ALERT_VIBRATION_ENABLED = SettingKey.Direct(
+        preferencesKey = booleanPreferencesKey("wear_alert_vibration_enabled"),
+        defaultValue = true
+    )
+
+    val PHONE_ALERT_SOUND_URI = SettingKey.Direct(
+        preferencesKey = stringPreferencesKey("phone_alert_sound_uri"),
+        defaultValue = "" // 空文字 = システムデフォルト(TYPE_ALARM)
+    )
+
+    val PHONE_ALERT_SOUND_NAME = SettingKey.Direct(
+        preferencesKey = stringPreferencesKey("phone_alert_sound_name"),
+        defaultValue = "デフォルト"
     )
 }
 

@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
@@ -22,9 +21,6 @@ class RadarListenerService : WearableListenerService() {
     companion object {
         private const val TAG = "RadarListenerService"
         const val PATH_RADAR_ALERT = "/radar-alert"
-        const val PATH_RADAR_CLEAR = "/radar-clear"
-        const val EXTRA_ALERT_JSON = "alert_json"
-        const val ACTION_DISMISS = "com.pirorin215.gardiaradar.wear.ACTION_DISMISS"
         const val ACTION_DEBUG_ALERT = "com.pirorin215.gardiaradar.wear.ACTION_DEBUG_ALERT"
         const val ACTION_DEBUG_CLEAR = "com.pirorin215.gardiaradar.wear.ACTION_DEBUG_CLEAR"
     }
@@ -39,7 +35,7 @@ class RadarListenerService : WearableListenerService() {
             Log.d(TAG, "Debug alert receiver triggered: action=${intent?.action}")
             when (intent?.action) {
                 ACTION_DEBUG_ALERT -> {
-                    val jsonData = intent.getStringExtra(EXTRA_ALERT_JSON) ?: "{\"targetCount\":1,\"targets\":[{\"id\":1,\"distance\":100,\"speed\":30,\"threat\":1}]}"
+                    val jsonData = intent.getStringExtra("alert_json") ?: "{\"targetCount\":1,\"targets\":[{\"id\":1,\"distance\":100,\"speed\":30,\"threat\":1}]}"
                     Log.d(TAG, "Debug alert triggered, calling startAlert()")
                     startAlert(jsonData)
                 }
@@ -72,13 +68,7 @@ class RadarListenerService : WearableListenerService() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "RadarListenerService onCreate")
-        vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vm.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
+        vibrator = systemVibrator()
 
         // デバッグ用BroadcastReceiverを登録
         val filter = IntentFilter()
@@ -100,25 +90,30 @@ class RadarListenerService : WearableListenerService() {
                 Log.d(TAG, "Alert data: $jsonData")
                 startAlert(jsonData)
             }
-            PATH_RADAR_CLEAR -> {
-                Log.d(TAG, "Clear signal received")
-                stopAlert()
-            }
         }
     }
 
     private fun startAlert(jsonData: String) {
         Log.d(TAG, "Starting alert...")
 
+        // 音・振動設定を確認
+        val prefs = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+        val soundEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_SOUND_ENABLED, true)
+        val vibrationEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_VIBRATION_ENABLED, true)
+
         // 1. アラーム音を1回だけ再生（先に開始してMediaPlayerの準備時間を確保）
-        startAlarmSound()
-        Log.d(TAG, "Alarm sound started")
+        if (soundEnabled) {
+            startAlarmSound()
+            Log.d(TAG, "Alarm sound started")
+        }
 
         // 2. 音より少し遅れて振動開始（同期調整）
-        handler.postDelayed({
-            vibrator?.vibrate(vibrationEffect)
-            Log.d(TAG, "Vibration started (delayed for sync)")
-        }, 50)
+        if (vibrationEnabled) {
+            handler.postDelayed({
+                vibrator?.vibrate(vibrationEffect)
+                Log.d(TAG, "Vibration started (delayed for sync)")
+            }, 50)
+        }
 
         // 3. 振動・音の終了（約4.0秒）後に自動停止
         handler.postDelayed(alarmTimeoutRunnable, 4000L)
@@ -182,11 +177,6 @@ class RadarListenerService : WearableListenerService() {
         Log.d(TAG, "Vibration cancelled")
         stopAlarmSound()
         Log.d(TAG, "Alarm sound stopped")
-
-        // 警告画面を閉じる
-        val dismissIntent = Intent(ACTION_DISMISS)
-        sendBroadcast(dismissIntent)
-        Log.d(TAG, "Dismiss broadcast sent")
     }
 
     override fun onDestroy() {

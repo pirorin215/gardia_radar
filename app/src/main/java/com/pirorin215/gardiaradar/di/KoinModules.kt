@@ -25,6 +25,6 @@ val appModule = module {
     single { RadarRepository(get(), get(), get(), get(), get(), get()) }
     single { RadarConnectionManager(get(), get(), get(), get(), get()) }
 
-    viewModel { RadarViewModel(get(), get(), get()) }
+    viewModel { RadarViewModel(get(), get(), get(), get(), get()) }
     viewModel { AppSettingsViewModel(get()) }
 }
