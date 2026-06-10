@@ -57,7 +57,7 @@
                 android:value="MONOCHROMATIC_IMAGE,SMALL_IMAGE" />
             <meta-data
                 android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
-                android:value="0" />
+                android:value="600" />
         </service>
 
     </application>

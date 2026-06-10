@@ -52,7 +52,7 @@ class RadarComplicationService : ComplicationDataSourceService() {
 
         val intent = Intent(this, MainActivity::class.java).apply {
             action = "com.pirorin215.gardiaradar.wear.ACTION_OPEN_RADAR"
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         Log.d("RadarComplication", "Created PendingIntent with action: ${intent.action}")
         val pendingIntent = PendingIntent.getActivity(
