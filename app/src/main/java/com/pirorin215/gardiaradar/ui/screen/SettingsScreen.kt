@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pirorin215.gardiaradar.ui.component.TwoStageSlider
 import android.app.Activity
 import android.content.Intent
 import android.media.RingtoneManager
@@ -294,19 +295,13 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("${clearSuppressionSeconds}秒", style = MaterialTheme.typography.bodyMedium, minLines = 1)
-                    Slider(
-                        value = clearSuppressionSeconds.toFloat(),
-                        onValueChange = { viewModel.saveClearSuppressionSeconds(it.toInt()) },
-                        valueRange = 0f..60f,
-                        steps = 60,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                TwoStageSlider(
+                    value = clearSuppressionSeconds,
+                    onValueChange = { viewModel.saveClearSuppressionSeconds(it) },
+                    valueRange = 0f..60f,
+                    coarseSteps = 15,
+                    unit = "秒"
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -321,19 +316,13 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("${radarLowBatteryThreshold}%", style = MaterialTheme.typography.bodyMedium, minLines = 1)
-                    Slider(
-                        value = radarLowBatteryThreshold.toFloat(),
-                        onValueChange = { viewModel.saveRadarLowBatteryThreshold(it.toInt()) },
-                        valueRange = 0f..100f,
-                        steps = 100,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                TwoStageSlider(
+                    value = radarLowBatteryThreshold,
+                    onValueChange = { viewModel.saveRadarLowBatteryThreshold(it) },
+                    valueRange = 0f..100f,
+                    coarseSteps = 25,
+                    unit = "%"
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -381,19 +370,13 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${rssiConnectThreshold}dBm", style = MaterialTheme.typography.bodyMedium, minLines = 1)
-                        Slider(
-                            value = rssiConnectThreshold.toFloat(),
-                            onValueChange = { viewModel.saveRssiConnectThreshold(it.toInt()) },
-                            valueRange = -100f..-40f,
-                            steps = 60,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    TwoStageSlider(
+                        value = rssiConnectThreshold,
+                        onValueChange = { viewModel.saveRssiConnectThreshold(it) },
+                        valueRange = -100f..-40f,
+                        coarseSteps = 15,
+                        unit = "dBm"
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -401,7 +384,7 @@ fun SettingsScreen(
                 // RSSI Disconnect Threshold slider
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "切断時のしきい値 (dBm)",
+                        "切断時のしきい值 (dBm)",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
@@ -410,19 +393,13 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${rssiDisconnectThreshold}dBm", style = MaterialTheme.typography.bodyMedium, minLines = 1)
-                        Slider(
-                            value = rssiDisconnectThreshold.toFloat(),
-                            onValueChange = { viewModel.saveRssiDisconnectThreshold(it.toInt()) },
-                            valueRange = -100f..-40f,
-                            steps = 60,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    TwoStageSlider(
+                        value = rssiDisconnectThreshold,
+                        onValueChange = { viewModel.saveRssiDisconnectThreshold(it) },
+                        valueRange = -100f..-40f,
+                        coarseSteps = 15,
+                        unit = "dBm"
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -439,24 +416,18 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${rssiDisconnectCount}回", style = MaterialTheme.typography.bodyMedium, minLines = 1)
-                        Slider(
-                            value = rssiDisconnectCount.toFloat(),
-                            onValueChange = {
-                                val count = it.toInt()
-                                if (count >= 1) {
-                                    viewModel.saveRssiDisconnectCount(count)
-                                }
-                            },
-                            valueRange = 1f..10f,
-                            steps = 9,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    TwoStageSlider(
+                        value = rssiDisconnectCount,
+                        onValueChange = {
+                            val count = it
+                            if (count >= 1) {
+                                viewModel.saveRssiDisconnectCount(count)
+                            }
+                        },
+                        valueRange = 1f..10f,
+                        coarseSteps = 3,
+                        unit = "回"
+                    )
                 }
             }
 
