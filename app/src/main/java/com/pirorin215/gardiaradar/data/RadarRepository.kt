@@ -17,6 +17,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.os.Build
+import android.os.Environment
+import kotlin.math.roundToInt
+import java.io.File
+import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.*
 
@@ -61,6 +66,11 @@ class RadarRepository(
 
     private val _rawPacket = MutableStateFlow("")
     val rawPacket = _rawPacket.asStateFlow()
+
+    // フィールドテスト用：直近パケットのリングバッファ（30秒ウィンドウ）
+    private data class RecentPacket(val receivedAtMs: Long, val hex: String, val dec: String, val decoded: String)
+    private val recentPackets = mutableListOf<RecentPacket>()
+    private val RECENT_PACKET_WINDOW_MS = 30_000L
 
     private val _radarBatteryLevel = MutableStateFlow(-1)
     val radarBatteryLevel = _radarBatteryLevel.asStateFlow()
@@ -702,27 +712,56 @@ class RadarRepository(
         val newTargets = mutableListOf<RadarTarget>()
         val dataInt = data.map { it.toInt() and 0xFF }
 
-        // Byte 0: Header 0x30
-        if (dataInt[0] == 0x30) {
-            if (dataInt[3] > 0) {
-                newTargets.add(RadarTarget(1, dataInt[3], dataInt[2], dataInt[1]))
-            }
-            if (dataInt[6] > 1) {
-                newTargets.add(RadarTarget(2, dataInt[6], dataInt[5], dataInt[4]))
-            }
-        }
+        // Bryton Gardia は ANT+ RDR 互換のビットパック構造を使用
+        // 詳細仕様・出典は docs/radar_packet_decoding.md を参照
+        // （UUID 手がかり: pycycling Issue#42、ビット構造: ANT+ Bike Radar プロファイル）
+        // byte[0]:    ページ番号 (0x30 等)
+        // byte[1]:    4脅威のレベル（各2bit: bit0-1=脅威1, bit2-3=脅威2, bit4-5=脅威3, bit6-7=脅威4）
+        // byte[3-5]:  4脅威の距離（各6bit、×3.125 で m）
+        // byte[6-7]:  4脅威の速度（各4bit、×3.04×3.6 で km/h）
+        // 存在判定はレベル > 0（レベル0 = 脅威なし）
+        if (dataInt.size >= 8 && dataInt[0] == 0x30) {
+            val levels = dataInt[1]
+            val t1Level = (levels shr 0) and 0b11
+            val t2Level = (levels shr 2) and 0b11
+            val t3Level = (levels shr 4) and 0b11
+            val t4Level = (levels shr 6) and 0b11
 
-        // Byte 8: Header 0x31
-        if (dataInt.size >= 15 && dataInt[8] == 0x31) {
-            if (dataInt[11] > 0) {
-                newTargets.add(RadarTarget(3, dataInt[11], dataInt[10], dataInt[9]))
-            }
-            if (dataInt[14] > 0) {
-                newTargets.add(RadarTarget(4, dataInt[14], dataInt[13], dataInt[12]))
-            }
+            // 距離: byte[3-5] に4脅威分が6bitずつリトルエンディアンでパック
+            val d0 = dataInt[3]
+            val d1 = dataInt[4]
+            val d2 = dataInt[5]
+            val t1Dist = (d0 shr 0) and 0b111111
+            val t2Dist = ((d0 shr 6) and 0b11) or (((d1 shr 0) and 0b1111) shl 2)
+            val t3Dist = ((d1 shr 4) and 0b1111) or (((d2 shr 0) and 0b11) shl 4)
+            val t4Dist = (d2 shr 2) and 0b111111
+
+            // 速度: byte[6-7] に4脅威分が4bitずつパック
+            val s0 = dataInt[6]
+            val s1 = dataInt[7]
+            val t1Speed = (s0 shr 0) and 0b1111
+            val t2Speed = (s0 shr 4) and 0b1111
+            val t3Speed = (s1 shr 0) and 0b1111
+            val t4Speed = (s1 shr 4) and 0b1111
+
+            if (t1Level > 0) newTargets.add(RadarTarget(1, (t1Dist * 3.125).roundToInt(), (t1Speed * 10.944).roundToInt(), t1Level))
+            if (t2Level > 0) newTargets.add(RadarTarget(2, (t2Dist * 3.125).roundToInt(), (t2Speed * 10.944).roundToInt(), t2Level))
+            if (t3Level > 0) newTargets.add(RadarTarget(3, (t3Dist * 3.125).roundToInt(), (t3Speed * 10.944).roundToInt(), t3Level))
+            if (t4Level > 0) newTargets.add(RadarTarget(4, (t4Dist * 3.125).roundToInt(), (t4Speed * 10.944).roundToInt(), t4Level))
         }
 
         _targets.value = newTargets
+        val decodedStr = newTargets.joinToString(", ") { "id=${it.id} d=${it.distance} s=${it.speed} t=${it.threat}" }
+
+        // 直近パケットをリングバッファに記録（フィールドテスト用ファイル保存向け）
+        val nowMs = System.currentTimeMillis()
+        synchronized(recentPackets) {
+            recentPackets.add(RecentPacket(nowMs, hexString, dataInt.joinToString(","), decodedStr))
+            val cutoff = nowMs - RECENT_PACKET_WINDOW_MS
+            while (recentPackets.isNotEmpty() && recentPackets.first().receivedAtMs < cutoff) {
+                recentPackets.removeAt(0)
+            }
+        }
 
         // 車両状態変化を検出してアラート通知
         val hasTargets = newTargets.isNotEmpty()
@@ -751,5 +790,50 @@ class RadarRepository(
         }
 
         notificationManager.handleRadarUpdate(newTargets, phoneNotificationMode, wearNotificationMode)
+    }
+
+    /**
+     * 直近のレーダーパケットをファイルに保存（フィールドテスト用）。
+     * 保存先: /Documents/GardiaRadar/logs/radar_yyyyMMdd_HHmmss.txt
+     * ファイラーアプリから取り出して解析に渡すことを想定。
+     * @param note 保存時の状況メモ（任意）。ファイルヘッダに記録される。空でも可。
+     * @return 保存したファイルの絶対パス、失敗時は null
+     */
+    fun saveRecentPacketsToFile(note: String): String? {
+        return try {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val fileName = "radar_$timestamp.txt"
+
+            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            val radarDir = File(documentsDir, "GardiaRadar/logs")
+            if (!radarDir.exists()) radarDir.mkdirs()
+
+            val snapshots: List<RecentPacket>
+            synchronized(recentPackets) {
+                snapshots = recentPackets.toList()
+            }
+
+            val content = StringBuilder()
+            content.append("=== GardiaRadar Raw Packet Snapshot ===\n")
+            content.append("Saved: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n")
+            content.append("Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})\n")
+            content.append("Window: last ${RECENT_PACKET_WINDOW_MS / 1000}s (${snapshots.size} packets)\n")
+            if (note.isNotBlank()) {
+                content.append("Note: $note\n")
+            }
+            content.append("\n=== Recent Packets ===\n")
+            val timeFmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+            snapshots.forEach { p ->
+                content.append("[${timeFmt.format(Date(p.receivedAtMs))}] hex=${p.hex} dec=[${p.dec}] -> [${p.decoded}]\n")
+            }
+
+            val file = File(radarDir, fileName)
+            file.writeText(content.toString())
+            Log.d(TAG, "Saved ${snapshots.size} packets to ${file.absolutePath}")
+            file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save recent packets: ${e.message}", e)
+            null
+        }
     }
 }

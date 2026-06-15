@@ -132,9 +132,10 @@ GardiaRadarは、Bryton Gardia R300(R300L)の**自転車用後方レーダーデ
 - **Service**: Standard Battery Service & Custom Radar Service
 - **Radar Data Characteristic**: `f3641401-00b0-4240-ba50-05ca45bf8abc` (Notify)
 - **Battery Characteristic**: `00002a19-0000-1000-8000-00805f9b34fb` (Read/Notify)
-- **データパケット**:
-    - `0x30` ヘッダー: ターゲット1-2の情報
-    - `0x31` ヘッダー: ターゲット3-4の情報
+- **データパケット**（20バイト、2バンク構成）:
+    - 詳細なデコード仕様は [docs/radar_packet_decoding.md](docs/radar_packet_decoding.md) を参照
+    - `0x30` バンク: 全4脅威のレベル・距離・速度をビットパックで格納
+    - `0x31` バンク: 拡張用（観測上は実質空）
 
 ### Wearable API (Phone ↔ Wear)
 - **Data Layer (`/radar-targets`, etc.)**: 状態の同期用。低遅延で車両位置を更新。

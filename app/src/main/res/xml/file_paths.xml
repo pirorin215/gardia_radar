@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 外部ストレージ公開ディレクトリ（/storage/emulated/0/）配下を FileProvider で共有 -->
+    <!-- 保存先: Documents/GardiaRadar/logs/radar_*.txt -->
+    <external-path name="external_storage" path="." />
+</paths>

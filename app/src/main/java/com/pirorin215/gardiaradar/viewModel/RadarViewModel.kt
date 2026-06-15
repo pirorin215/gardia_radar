@@ -60,4 +60,11 @@ class RadarViewModel(
             notificationManager.handleRadarUpdate(fakeTargets, phoneMode, wearMode)
         }
     }
+
+    /**
+     * 直近のレーダー生パケットをファイルに保存（フィールドテスト用）。
+     * @param note 保存時の状況メモ（任意）。ファイルヘッダに記録される。
+     * @return 保存先ファイルの絶対パス、失敗時は null
+     */
+    fun saveRadarData(note: String): String? = repository.saveRecentPacketsToFile(note)
 }

@@ -1,25 +1,37 @@
 package com.pirorin215.gardiaradar.ui.screen
 
+import android.content.Intent
+import android.os.Environment
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,12 +51,81 @@ fun MainScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsState()
     val targets by viewModel.targets.collectAsState()
-    val rawPacket by viewModel.rawPacket.collectAsState()
     val radarBatteryLevel by viewModel.radarBatteryLevel.collectAsState()
     val wearBatteryLevel by viewModel.wearBatteryLevel.collectAsState()
     val suppressionRemaining by viewModel.suppressionRemainingSeconds.collectAsState()
     val connectionElapsedSeconds by viewModel.connectionElapsedSeconds.collectAsState()
     val rssi by viewModel.rssi.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var noteText by remember { mutableStateOf("") }
+    var lastSentCount by remember { mutableStateOf(0) }
+
+    // 共有シートから戻ってきたら、送信済みフォルダへの移動完了を通知
+    val shareLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (lastSentCount > 0) {
+            val count = lastSentCount
+            lastSentCount = 0
+            scope.launch { snackbarHostState.showSnackbar("${count}件を送信済みフォルダに移動しました") }
+        }
+    }
+
+    // 保存フォルダ内の未送信ファイルを送信済みフォルダへ移動し、一括で Google Drive 等へ共有
+    fun shareAllToCloud() {
+        try {
+            val baseDir = java.io.File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                "GardiaRadar/logs"
+            )
+            if (!baseDir.exists()) baseDir.mkdirs()
+            val uploadedDir = java.io.File(baseDir, "uploaded")
+            if (!uploadedDir.exists()) uploadedDir.mkdirs()
+
+            val files = baseDir.listFiles { f -> f.isFile && f.name.endsWith(".txt") }
+                ?.sortedByDescending { it.lastModified() }
+                ?: emptyList()
+            if (files.isEmpty()) {
+                scope.launch { snackbarHostState.showSnackbar("アップロードするファイルがありません") }
+                return
+            }
+
+            // 送信済みフォルダへ移動（再送信を防ぐ）。移動後の URI を共有に渡すことで URI 不整合を防ぐ
+            val moved = files.mapNotNull { src ->
+                val dest = java.io.File(uploadedDir, src.name)
+                if (src.renameTo(dest)) dest else null
+            }
+            if (moved.isEmpty()) {
+                scope.launch { snackbarHostState.showSnackbar("ファイルの移動に失敗しました") }
+                return
+            }
+
+            lastSentCount = moved.size
+            val authority = "${context.packageName}.fileprovider"
+            val uris = moved.map { FileProvider.getUriForFile(context, authority, it) }
+            val shareIntent = if (uris.size == 1) {
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uris.first())
+                }
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "text/plain"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                }
+            }.apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Google Drive 等へ送信 (${moved.size}件)")
+            shareLauncher.launch(chooser)
+        } catch (e: Exception) {
+            scope.launch { snackbarHostState.showSnackbar("送信できませんでした: ${e.message}") }
+        }
+    }
 
     // Convert seconds to HH:MM:SS format
     val elapsedTimeString = remember(connectionElapsedSeconds) {
@@ -64,6 +145,12 @@ fun MainScreen(
     }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(bottom = 56.dp)
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -358,19 +445,73 @@ fun MainScreen(
                 }
             }
 
-            // Raw Data Debug View (Bottom)
-            Box(
+            // 保存系ボタン（Bottom）
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.8f))
-                    .padding(8.dp)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "RAW: $rawPacket",
-                    color = Color.Green,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    fontSize = 10.sp
+                Button(
+                    onClick = { showSaveDialog = true },
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Orange)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("保存", color = Color.White)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Button(
+                    onClick = { shareAllToCloud() },
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f))
+                ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("ドライブへ送信", color = Color.White)
+                }
+            }
+
+            // フィールドテスト用：状況メモ入力ダイアログ
+            if (showSaveDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showSaveDialog = false
+                        noteText = ""
+                    },
+                    title = { Text("状況メモ") },
+                    text = {
+                        OutlinedTextField(
+                            value = noteText,
+                            onValueChange = { noteText = it },
+                            label = { Text("例：車が1台きたとき") },
+                            singleLine = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val note = noteText.trim()
+                            val path = viewModel.saveRadarData(note)
+                            showSaveDialog = false
+                            noteText = ""
+                            if (path != null) {
+                                scope.launch { snackbarHostState.showSnackbar("保存しました") }
+                            } else {
+                                scope.launch { snackbarHostState.showSnackbar("保存に失敗しました") }
+                            }
+                        }) { Text("保存") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showSaveDialog = false
+                            noteText = ""
+                        }) { Text("キャンセル") }
+                    }
                 )
             }
         }
