@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.content.ComponentName
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,6 +40,12 @@ import com.pirorin215.gardiaradar.ui.theme.BleTemplateTheme
 import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
 import com.pirorin215.gardiaradar.viewModel.RadarViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
+
+private fun isNotificationListenerEnabled(context: Context): Boolean {
+    val cn = ComponentName(context, com.pirorin215.gardiaradar.notification.GardiaNotificationListener::class.java)
+    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    return flat != null && flat.contains(cn.flattenToString())
+}
 
 class MainActivity : ComponentActivity() {
     private val radarViewModel: RadarViewModel by viewModel()
@@ -94,12 +101,19 @@ class MainActivity : ComponentActivity() {
 
                     // バッテリー最適化ダイアログ
                     var showBatteryDialog by remember { mutableStateOf(false) }
+                    var showNotificationAccessDialog by remember { mutableStateOf(false) }
 
                     LaunchedEffect(Unit) {
                         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                         val isOptimized = !powerManager.isIgnoringBatteryOptimizations(context.packageName)
                         if (isOptimized) {
                             showBatteryDialog = true
+                        }
+
+                        // 通知アクセス（NotificationListenerService）チェック
+                        val isAccessGranted = isNotificationListenerEnabled(context)
+                        if (!isAccessGranted) {
+                            showNotificationAccessDialog = true
                         }
                     }
 
@@ -117,6 +131,23 @@ class MainActivity : ComponentActivity() {
                                     Log.e("MainActivity", "Failed to open battery settings", e)
                                 }
                                 showBatteryDialog = false
+                            }
+                        )
+                    }
+
+                    if (showNotificationAccessDialog) {
+                        NotificationAccessPermissionDialog(
+                            onDismiss = { showNotificationAccessDialog = false },
+                            onOpenSettings = {
+                                try {
+                                    val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Log.e("MainActivity", "Failed to open notification settings", e)
+                                }
+                                showNotificationAccessDialog = false
                             }
                         )
                     }
@@ -166,6 +197,53 @@ private fun BatteryOptimizationDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "設定画面で許可を与えると、\n再インストール後も安定して動作します。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onOpenSettings) {
+                Text("設定を開く")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("後で")
+            }
+        }
+    )
+}
+
+@Composable
+fun NotificationAccessPermissionDialog(
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(imageVector = Icons.Filled.Warning, contentDescription = "警告")
+        },
+        title = {
+            Text("通知アクセス権限の設定が必要です")
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "このアプリがバックグラウンドで強制終了されずに動作し続けるためには、" +
+                            "「通知アクセス権」の許可が必要です。\n\n" +
+                            "※通知の読み取りなどは行いません。常時起動を保証するためのシステム機能として利用します。",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "下のボタンから設定画面を開き、「GardiaRadar」の通知アクセスを許可してください。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
