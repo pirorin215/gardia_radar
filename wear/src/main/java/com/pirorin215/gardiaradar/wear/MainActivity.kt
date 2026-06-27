@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private var connectionStartTime by mutableStateOf<Long?>(null)
     private var connectionEndTime by mutableStateOf<Long?>(null)
     private var elapsedTime by mutableStateOf("")
+    private var silentMode by mutableStateOf(false)
 
     private val handler = Handler(Looper.getMainLooper())
     private val finishOnDisconnectRunnable = Runnable {
@@ -113,6 +114,10 @@ class MainActivity : ComponentActivity() {
 
         // 接続状態とレーダー電池の初期値をDataClientから読み取る
         readInitialState()
+
+        // サイレントモードの初期状態を読み込み
+        silentMode = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(WearableDataListener.PREF_KEY_SILENT_MODE, false)
 
         setContent {
             MaterialTheme {
@@ -206,6 +211,15 @@ class MainActivity : ComponentActivity() {
             sendBroadcast(intent)
             Log.d("MainActivity", "Broadcast sent")
         }, 100)
+    }
+
+    private fun toggleSilentMode() {
+        silentMode = !silentMode
+        getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(WearableDataListener.PREF_KEY_SILENT_MODE, silentMode)
+            .apply()
+        Log.d("MainActivity", "Silent mode toggled: $silentMode")
     }
 
     @Composable
@@ -408,6 +422,29 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+
+            // サイレントモード切替ボタン（右下）
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 28.dp, bottom = 32.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (silentMode) Color(0xFFFFAB00) else Color.White.copy(alpha = 0.15f))
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                toggleSilentMode()
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (silentMode) "🔇" else "🔔",
+                    fontSize = 20.sp
+                )
             }
         }
     }

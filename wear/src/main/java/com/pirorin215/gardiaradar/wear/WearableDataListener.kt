@@ -35,6 +35,7 @@ class WearableDataListener : WearableListenerService() {
         const val PREF_KEY_LAST_BATTERY_TIME = "lastSentBatteryTime"
         const val PREF_KEY_ALERT_SOUND_ENABLED = "alertSoundEnabled"
         const val PREF_KEY_ALERT_VIBRATION_ENABLED = "alertVibrationEnabled"
+        const val PREF_KEY_SILENT_MODE = "silentMode"
     }
 
     private var lastTargetsUpdateTime = 0L
@@ -214,7 +215,8 @@ class WearableDataListener : WearableListenerService() {
     private fun playConnectionFeedback(isConnected: Boolean) {
         // 音・振動設定を確認
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val soundEnabled = prefs.getBoolean(PREF_KEY_ALERT_SOUND_ENABLED, true)
+        val silentMode = prefs.getBoolean(PREF_KEY_SILENT_MODE, false)
+        val soundEnabled = prefs.getBoolean(PREF_KEY_ALERT_SOUND_ENABLED, true) && !silentMode
         val vibrationEnabled = prefs.getBoolean(PREF_KEY_ALERT_VIBRATION_ENABLED, true)
 
         if (vibrationEnabled) {

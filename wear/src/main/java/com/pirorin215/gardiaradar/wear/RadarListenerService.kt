@@ -98,7 +98,8 @@ class RadarListenerService : WearableListenerService() {
 
         // 音・振動設定を確認
         val prefs = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
-        val soundEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_SOUND_ENABLED, true)
+        val silentMode = prefs.getBoolean(WearableDataListener.PREF_KEY_SILENT_MODE, false)
+        val soundEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_SOUND_ENABLED, true) && !silentMode
         val vibrationEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_VIBRATION_ENABLED, true)
 
         // 1. アラーム音を1回だけ再生（先に開始してMediaPlayerの準備時間を確保）
