@@ -304,20 +304,32 @@ class RadarRepository(
         val radarBat = _radarBatteryLevel.value
         val now = LocalDateTime.now()
 
+        // 同期的にセッションを作成し即永続化する（race対策 + プロセス終了対策）。
+        // 従来はscope.launch内でcurrentSessionを設定していたため、接続確立とcurrentSession代入の
+        // 間に隙間が生じ、直後の切断でON/OFFセッションの対応が崩れるraceがあった。
+        val session = BatterySession(
+            id = UUID.randomUUID().toString(),
+            startTime = now,
+            sessionStartTime = now,
+            startPhoneBattery = phoneBat,
+            startWatchBattery = -1,
+            startRadarBattery = radarBat,
+            wasPowerSavingMode = false,
+            wasNormalMode = true,
+            type = SessionType.CONNECTED
+        )
+        currentSession = session
+        batterySessionRepository.addSession(session)
+        Log.d(TAG, "ON session started at ${formatTime(now)}: phone=$phoneBat, radar=$radarBat")
+
+        // 省電力モード設定のみ非同期で取得し、セッションへ反映する
         scope.launch {
             val enabled = appSettingsRepository.getFlow(Settings.WEAR_POWER_SAVING_MODE).first()
-            currentSession = BatterySession(
-                id = UUID.randomUUID().toString(),
-                startTime = now,
-                sessionStartTime = now,
-                startPhoneBattery = phoneBat,
-                startWatchBattery = -1,
-                startRadarBattery = radarBat,
-                wasPowerSavingMode = enabled,
-                wasNormalMode = !enabled,
-                type = SessionType.CONNECTED
-            )
-            Log.d(TAG, "ON session started at ${formatTime(now)}: phone=$phoneBat, radar=$radarBat, ps=$enabled")
+            currentSession?.let { s ->
+                val updated = s.copy(wasPowerSavingMode = enabled, wasNormalMode = !enabled)
+                currentSession = updated
+                batterySessionRepository.updateSession(updated)
+            }
         }
     }
 
@@ -325,7 +337,7 @@ class RadarRepository(
         resetCommCounts()
 
         val now = LocalDateTime.now()
-        currentSession = BatterySession(
+        val session = BatterySession(
             id = UUID.randomUUID().toString(),
             startTime = now,
             startPhoneBattery = -1,
@@ -333,6 +345,11 @@ class RadarRepository(
             startRadarBattery = -1,
             type = SessionType.DISCONNECTED
         )
+        // 即永続化: OFFセッションは「次回接続時」にしか保存されない設計だったため、
+        // プロセス終了でcurrentSessionごと消滅しOFFだけ履歴に残らない主因だった。
+        // 開始時にendTime=nullで保存し、接続時にupdateSessionで終了時刻を確定する。
+        currentSession = session
+        batterySessionRepository.addSession(session)
         Log.d(TAG, "OFF session started at ${formatTime(now)}")
     }
 
@@ -371,7 +388,7 @@ class RadarRepository(
         }
 
         currentSession = null
-        batterySessionRepository.addSession(finalSession)
+        batterySessionRepository.updateSession(finalSession)
         Log.d(TAG, "${session.type} session saved: ${finalSession.durationSeconds}s, comm=${finalSession.totalCommunicationCount}")
     }
 

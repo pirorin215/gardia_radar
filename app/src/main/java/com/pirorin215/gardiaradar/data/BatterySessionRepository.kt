@@ -44,22 +44,36 @@ class BatterySessionRepository(private val context: Context) {
                 val json = file.readText()
                 val type = object : TypeToken<List<BatterySession>>() {}.type
                 val list: List<BatterySession> = gson.fromJson(json, type)
-                
+
                 // LocalDateTimeが壊れている（nullが入っている）データを除外
-                val validList = list.filter { 
+                val validList = list.filter {
                     try {
                         it.startTime != null && it.id != null
                     } catch (e: Exception) {
                         false
                     }
                 }
-                
-                _sessions.value = validList.sortedByDescending { it.startTime }
+
+                // 前回プロセス終了で終了処理が走らなかったセッション（endTime=null）を
+                // startTimeで閉じる（期間0）。開始時刻・種別は残し、UIに表示させる。
+                var hadUnfinished = false
+                val closedList = validList.map { session ->
+                    if (session.endTime == null) {
+                        hadUnfinished = true
+                        Log.w(TAG, "Closing unfinished session (type=${session.type}, id=${session.id}) at startTime")
+                        session.copy(endTime = session.startTime)
+                    } else session
+                }.sortedByDescending { it.startTime }
+
+                if (hadUnfinished) {
+                    // クリーンアップ結果をファイルへ書き戻す
+                    saveSessions(closedList)
+                } else {
+                    _sessions.value = closedList
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load sessions", e)
-            // 読み込みに失敗した場合は、最悪ファイルを削除してリセットすることも検討
-            // File(context.filesDir, fileName).delete()
         }
     }
 
@@ -75,11 +89,13 @@ class BatterySessionRepository(private val context: Context) {
     }
 
     fun addSession(session: BatterySession) {
-        val newList = _sessions.value.toMutableList()
-        newList.add(session)
-        // 最大200件に制限（古いものから削除）
-        val trimmed = if (newList.size > 200) newList.takeLast(200) else newList
-        saveSessions(trimmed)
+        // _sessionsは新→旧ソート。新セッションを加え、新→旧で整列後、
+        // 新しい200件（先頭）を残す。従来のtakeLastは末尾=古い方を残していたバグ。
+        val newList = (_sessions.value + session)
+            .distinctBy { it.id }
+            .sortedByDescending { it.startTime }
+            .take(200)
+        saveSessions(newList)
     }
 
     fun updateSession(updatedSession: BatterySession) {
