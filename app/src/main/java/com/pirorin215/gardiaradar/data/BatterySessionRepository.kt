@@ -104,6 +104,12 @@ class BatterySessionRepository(private val context: Context) {
         }
         saveSessions(newList)
     }
+    fun updateEndWatchBattery(sessionId: String, level: Int) {
+        val newList = _sessions.value.map {
+            if (it.id == sessionId) it.copy(endWatchBattery = level) else it
+        }
+        saveSessions(newList)
+    }
 
     fun deleteSession(id: String) {
         val newList = _sessions.value.filter { it.id != id }

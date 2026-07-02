@@ -90,6 +90,11 @@ class RadarRepository(
 
     // セッション管理
     private var currentSession: BatterySession? = null
+    // 切断直後に保存したCONNECTEDセッションのID。
+    // wear→phoneのウォッチ電池受信がsaveCurrentSessionより後に届くため、
+    // 受信時にendWatchBatteryを反映するために保持する（接続・切断の2タイミングのみ通信）。
+    private var pendingEndWatchBatterySessionId: String? = null
+    private var pendingEndWatchBatteryDeadlineMs: Long = 0L
     private var elapsedTimerJob: kotlinx.coroutines.Job? = null
 
     // Target notification control
@@ -222,16 +227,25 @@ class RadarRepository(
 
     fun setWearBatteryLevel(level: Int) {
         _wearBatteryLevel.value = level
-        currentSession?.let { session ->
+        val now = LocalDateTime.now()
+        val session = currentSession
+        if (session != null) {
             if (session.startWatchBattery < 0) {
-                val now = LocalDateTime.now()
                 currentSession = session.copy(
                     startWatchBattery = level,
                     watchBatteryReceivedTime = now
                 )
                 Log.d(TAG, "Updated session startWatchBattery to: $level% at ${formatTime(now)}")
             }
+            return
         }
+        // 切断直後: saveCurrentSessionより後にwear→phoneのウォッチ電池が届くため、
+        // 直近のCONNECTEDセッションのendWatchBatteryを反映する。
+        val id = pendingEndWatchBatterySessionId ?: return
+        pendingEndWatchBatterySessionId = null
+        if (System.currentTimeMillis() > pendingEndWatchBatteryDeadlineMs) return
+        batterySessionRepository.updateEndWatchBattery(id, level)
+        Log.d(TAG, "Updated last session endWatchBattery to: $level% at ${formatTime(now)}")
     }
 
     fun resetState() {
@@ -387,6 +401,12 @@ class RadarRepository(
             }
         }
 
+        if (finalSession.type == SessionType.CONNECTED) {
+            // 切断後のwear→phoneウォッチ電池受信でendWatchBatteryを反映するため、
+            // セッションIDを記録（通信ラグで受信が保存後に届く）。10秒間のみ有効。
+            pendingEndWatchBatterySessionId = finalSession.id
+            pendingEndWatchBatteryDeadlineMs = System.currentTimeMillis() + 10_000L
+        }
         currentSession = null
         batterySessionRepository.updateSession(finalSession)
         Log.d(TAG, "${session.type} session saved: ${finalSession.durationSeconds}s, comm=${finalSession.totalCommunicationCount}")
