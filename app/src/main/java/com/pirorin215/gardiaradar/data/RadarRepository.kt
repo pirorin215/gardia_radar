@@ -229,7 +229,13 @@ class RadarRepository(
         _wearBatteryLevel.value = level
         val now = LocalDateTime.now()
         val session = currentSession
-        if (session != null) {
+        // startWatchBattery の補完は CONNECTED セッション中のみ行う。
+        // 切断後に startDisconnectedSession() が currentSession を設定するため、
+        // session != null だけで判定すると、切断応答として遅延到着したウォッチ電池が
+        // DISCONNECTED セッションの startWatchBattery を埋める処理に吸われ、
+        // 直近の CONNECTED セッションの endWatchBattery 更新（pending 経路）へ到達しなくなる。
+        // これが「切断時のウォッチ電池が開始時と同じ値になる」不具合の原因だった。
+        if (session != null && session.type == SessionType.CONNECTED) {
             if (session.startWatchBattery < 0) {
                 currentSession = session.copy(
                     startWatchBattery = level,
