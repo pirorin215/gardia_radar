@@ -35,7 +35,8 @@ class RadarNotificationManager(
     private val context: Context,
     private val scope: CoroutineScope,
     private val wearMessageSender: WearMessageSender,
-    private val appSettingsRepository: AppSettingsRepository
+    private val appSettingsRepository: AppSettingsRepository,
+    private val wearableDataHost: WearableDataHost
 ) {
     private val TAG = "RadarNotificationManager"
     private val notificationManager =
@@ -50,6 +51,7 @@ class RadarNotificationManager(
     private val _suppressionRemainingSeconds = MutableStateFlow(0)
     val suppressionRemainingSeconds = _suppressionRemainingSeconds.asStateFlow()
     private var suppressionCountdownJob: Job? = null
+    private var cooldownActive = false
 
     // 定期通知用
     private val notificationScope = CoroutineScope(Job())
@@ -314,21 +316,42 @@ class RadarNotificationManager(
     }
 
     private fun startSuppressionCountdown() {
-        stopSuppressionCountdown()
+        // 既存ジョブの直接クリーンアップ（stopSuppressionCountdown を呼ぶと
+        // ウォッチへの誤ったクールダウン解除通知を送ってしまうため、ここでは送信しない）
+        suppressionCountdownJob?.cancel()
+        suppressionCountdownJob = null
+        _suppressionRemainingSeconds.value = 0
+
         suppressionCountdownJob = notificationScope.launch {
             val suppressionSeconds = appSettingsRepository.getFlow(Settings.CLEAR_SUPPRESSION_SECONDS).first()
+            if (suppressionSeconds <= 0) {
+                // クールダウン無効（設定0秒）: 何もしない
+                return@launch
+            }
+            cooldownActive = true
             for (i in suppressionSeconds downTo 1) {
                 _suppressionRemainingSeconds.value = i
                 delay(1000)
             }
             _suppressionRemainingSeconds.value = 0
+            // 自然終了: ウォッチへクールダウン解除を通知
+            if (cooldownActive) {
+                cooldownActive = false
+                wearableDataHost.putCooldownCleared()
+            }
         }
     }
 
     private fun stopSuppressionCountdown() {
+        val wasActive = cooldownActive
+        cooldownActive = false
         suppressionCountdownJob?.cancel()
         suppressionCountdownJob = null
         _suppressionRemainingSeconds.value = 0
+        // 抑制期間外で車両再検知などによる停止時、実際にクールダウン中だった場合のみ通知
+        if (wasActive) {
+            wearableDataHost.putCooldownCleared()
+        }
     }
 
     fun handleBatteryUpdate(level: Int) {

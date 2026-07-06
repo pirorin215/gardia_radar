@@ -26,6 +26,8 @@ class WearableDataListener : WearableListenerService() {
         const val ACTION_CONNECTION_STATE_CHANGED = "com.pirorin215.gardiaradar.wear.ACTION_CONNECTION_STATE_CHANGED"
         const val ACTION_RADAR_BATTERY = "com.pirorin215.gardiaradar.wear.ACTION_RADAR_BATTERY"
         const val ACTION_POWER_SAVING_MODE_CHANGED = "com.pirorin215.gardiaradar.wear.ACTION_POWER_SAVING_MODE_CHANGED"
+        const val ACTION_COOLDOWN_CLEARED = "com.pirorin215.gardiaradar.wear.ACTION_COOLDOWN_CLEARED"
+        const val ACTION_COOLDOWN_STARTED = "com.pirorin215.gardiaradar.wear.ACTION_COOLDOWN_STARTED"
         const val PREFS_NAME = "radar_prefs"
         const val PREF_KEY_CONNECTED = "isConnected"
         const val PREF_KEY_START_TIME = "connectionStartTime"
@@ -36,6 +38,7 @@ class WearableDataListener : WearableListenerService() {
         const val PREF_KEY_ALERT_SOUND_ENABLED = "alertSoundEnabled"
         const val PREF_KEY_ALERT_VIBRATION_ENABLED = "alertVibrationEnabled"
         const val PREF_KEY_SILENT_MODE = "silentMode"
+        const val PREF_KEY_IN_COOLDOWN = "inCooldown"
     }
 
     private var lastTargetsUpdateTime = 0L
@@ -64,6 +67,9 @@ class WearableDataListener : WearableListenerService() {
                         }
                         "/alert-settings" -> {
                             handleAlertSettingsUpdate(dataMap)
+                        }
+                        "/cooldown-cleared" -> {
+                            handleCooldownCleared(dataMap)
                         }
                     }
                 }
@@ -176,6 +182,15 @@ class WearableDataListener : WearableListenerService() {
             .putBoolean(PREF_KEY_ALERT_SOUND_ENABLED, soundEnabled)
             .putBoolean(PREF_KEY_ALERT_VIBRATION_ENABLED, vibrationEnabled)
             .apply()
+    }
+
+    private fun handleCooldownCleared(dataMap: DataMap) {
+        Log.d(TAG, "Cooldown cleared received")
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean(PREF_KEY_IN_COOLDOWN, false)
+            .apply()
+        updateComplications()
+        sendBroadcast(Intent(ACTION_COOLDOWN_CLEARED))
     }
 
     private fun sendWatchBatteryToPhone(force: Boolean) {

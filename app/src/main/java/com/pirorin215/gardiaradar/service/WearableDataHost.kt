@@ -113,6 +113,22 @@ class WearableDataHost(
         }
     }
 
+    fun putCooldownCleared() {
+        val putDataMapRequest = PutDataMapRequest.create("/cooldown-cleared")
+        putDataMapRequest.dataMap.putLong("timestamp", System.currentTimeMillis())
+
+        val putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent()
+
+        dataClient.putDataItem(putDataRequest).apply {
+            addOnSuccessListener {
+                Log.d(TAG, "Cooldown cleared notification hosted")
+            }
+            addOnFailureListener { e ->
+                Log.e(TAG, "Failed to host cooldown cleared notification", e)
+            }
+        }
+    }
+
     fun putAlertSettingsData(soundEnabled: Boolean, vibrationEnabled: Boolean) {
         val putDataMapRequest = PutDataMapRequest.create("/alert-settings")
         putDataMapRequest.dataMap.putBoolean("soundEnabled", soundEnabled)

@@ -1,6 +1,7 @@
 package com.pirorin215.gardiaradar.wear
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -13,6 +14,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
+import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 
@@ -29,6 +31,8 @@ class RadarListenerService : WearableListenerService() {
     private var mediaPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
     private val alarmTimeoutRunnable = Runnable { stopAlert() }
+    private val COOLDOWN_TIMEOUT_MS = 60_000L
+    private val cooldownTimeoutRunnable = Runnable { clearCooldown() }
 
     private val debugAlertReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -133,6 +137,45 @@ class RadarListenerService : WearableListenerService() {
             Log.d(TAG, "MainActivity brought to front")
         } else {
             Log.d(TAG, "省電力モードが有効 - MainActivityの起動をスキップ")
+            startCooldown()
+        }
+    }
+
+    /**
+     * 省電力モード時: アラート到着をクールダウン開始の契機とする。
+     * 通常モードでは /radar-targets の推論で開始するが、省電力モードでは
+     * /radar-targets が送信されないため、アラート到着で開始する。
+     * 解除は /cooldown-cleared 信号（WearableDataListener で受信）または60秒タイムアウト。
+     */
+    private fun startCooldown() {
+        Log.d(TAG, "Starting cooldown (power saving mode)")
+        getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, true)
+            .apply()
+        updateComplications()
+        sendBroadcast(Intent(WearableDataListener.ACTION_COOLDOWN_STARTED))
+        handler.removeCallbacks(cooldownTimeoutRunnable)
+        handler.postDelayed(cooldownTimeoutRunnable, COOLDOWN_TIMEOUT_MS)
+    }
+
+    /** フェイルセーフ: 解除信号が来ない場合の60秒タイムアウトでクールダウンをクリア */
+    private fun clearCooldown() {
+        Log.d(TAG, "Cooldown timeout (fail-safe)")
+        getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, false)
+            .apply()
+        updateComplications()
+    }
+
+    private fun updateComplications() {
+        try {
+            val requester = ComplicationDataSourceUpdateRequester.create(
+                this,
+                ComponentName(this, RadarComplicationService::class.java)
+            )
+            requester.requestUpdateAll()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to request complication update", e)
         }
     }
 
@@ -182,6 +225,7 @@ class RadarListenerService : WearableListenerService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(alarmTimeoutRunnable)
+        handler.removeCallbacks(cooldownTimeoutRunnable)
         vibrator?.cancel()
         stopAlarmSound()
         try {

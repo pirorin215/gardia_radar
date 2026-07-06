@@ -37,17 +37,25 @@ class RadarComplicationService : ComplicationDataSourceService() {
     ) {
         Log.d("RadarComplication", "onComplicationRequest: type=${request.complicationType}")
 
-        // SharedPreferencesから接続状態を取得
+        // SharedPreferencesから接続状態・クールダウン状態を取得
         val prefs = getSharedPreferences("radar_prefs", MODE_PRIVATE)
         val isConnected = prefs.getBoolean("isConnected", false)
-        Log.d("RadarComplication", "Connection state from prefs: connected=$isConnected")
+        val isInCooldown = prefs.getBoolean("inCooldown", false)
+        Log.d("RadarComplication", "State from prefs: connected=$isConnected, cooldown=$isInCooldown")
 
-        val iconRes = if (isConnected) {
-            Log.d("RadarComplication", "Setting icon to connected (radar green)")
-            R.drawable.ic_radar_connected_green
-        } else {
-            Log.d("RadarComplication", "Setting icon to disconnected (radar red)")
-            R.drawable.ic_radar_disconnected_red
+        val iconRes = when {
+            isInCooldown && isConnected -> {
+                Log.d("RadarComplication", "Setting icon to cooldown (radar orange)")
+                R.drawable.ic_radar_cooldown_orange
+            }
+            isConnected -> {
+                Log.d("RadarComplication", "Setting icon to connected (radar green)")
+                R.drawable.ic_radar_connected_green
+            }
+            else -> {
+                Log.d("RadarComplication", "Setting icon to disconnected (radar red)")
+                R.drawable.ic_radar_disconnected_red
+            }
         }
 
         val intent = Intent(this, MainActivity::class.java).apply {

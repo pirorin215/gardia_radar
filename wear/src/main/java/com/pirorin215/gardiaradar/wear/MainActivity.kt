@@ -1,6 +1,7 @@
 package com.pirorin215.gardiaradar.wear
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -13,6 +14,7 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,20 +65,46 @@ class MainActivity : ComponentActivity() {
     private var connectionEndTime by mutableStateOf<Long?>(null)
     private var elapsedTime by mutableStateOf("")
     private var silentMode by mutableStateOf(false)
+    private var isInCooldown by mutableStateOf(false)
+    private var prevTargetCountForCooldown = 0
 
     private val handler = Handler(Looper.getMainLooper())
     private val finishOnDisconnectRunnable = Runnable {
         Log.d("MainActivity", "Auto-finishing after disconnect timeout")
         finish()
     }
+    private val cooldownTimeoutRunnable = Runnable {
+        Log.d("MainActivity", "Cooldown timeout (fail-safe)")
+        isInCooldown = false
+        persistCooldownState(false)
+    }
 
     private val targetsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 WearableDataListener.ACTION_TARGETS_UPDATED -> {
-                    targetCount = intent.getIntExtra("targetCount", 0)
+                    val newCount = intent.getIntExtra("targetCount", 0)
+                    // クールダウン開始推論: 車両消失（>0 → 0）でクールダウン表示を開始
+                    if (prevTargetCountForCooldown > 0 && newCount == 0) {
+                        isInCooldown = true
+                        persistCooldownState(true)
+                        handler.removeCallbacks(cooldownTimeoutRunnable)
+                        handler.postDelayed(cooldownTimeoutRunnable, 60000L)
+                    }
+                    prevTargetCountForCooldown = newCount
+                    targetCount = newCount
                     @Suppress("DEPRECATION")
                     distances = intent.getIntegerArrayListExtra("distances")?.map { it.toInt() } ?: emptyList()
+                }
+                WearableDataListener.ACTION_COOLDOWN_CLEARED -> {
+                    handler.removeCallbacks(cooldownTimeoutRunnable)
+                    isInCooldown = false
+                    persistCooldownState(false)
+                }
+                WearableDataListener.ACTION_COOLDOWN_STARTED -> {
+                    isInCooldown = true
+                    handler.removeCallbacks(cooldownTimeoutRunnable)
+                    handler.postDelayed(cooldownTimeoutRunnable, 60000L)
                 }
                 WearableDataListener.ACTION_CONNECTION_STATE_CHANGED -> {
                     isConnected = intent.getBooleanExtra("isConnected", false)
@@ -106,6 +134,8 @@ class MainActivity : ComponentActivity() {
         val filter = IntentFilter(WearableDataListener.ACTION_TARGETS_UPDATED)
         filter.addAction(WearableDataListener.ACTION_CONNECTION_STATE_CHANGED)
         filter.addAction(WearableDataListener.ACTION_RADAR_BATTERY)
+        filter.addAction(WearableDataListener.ACTION_COOLDOWN_CLEARED)
+        filter.addAction(WearableDataListener.ACTION_COOLDOWN_STARTED)
         filter.addAction(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(targetsReceiver, filter)
 
@@ -193,6 +223,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(finishOnDisconnectRunnable)
+        handler.removeCallbacks(cooldownTimeoutRunnable)
         unregisterReceiver(targetsReceiver)
     }
 
@@ -220,6 +251,26 @@ class MainActivity : ComponentActivity() {
             .putBoolean(WearableDataListener.PREF_KEY_SILENT_MODE, silentMode)
             .apply()
         Log.d("MainActivity", "Silent mode toggled: $silentMode")
+    }
+
+    /**
+     * クールダウン状態を SharedPreferences に永続化し、コンプリケーションの更新を要求する。
+     * コンプリケーションはプロセス生存とは無関係に状態を読むため、Prefs の同期が必要。
+     */
+    private fun persistCooldownState(active: Boolean) {
+        getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, active)
+            .apply()
+        try {
+            val requester = ComplicationDataSourceUpdateRequester.create(
+                this,
+                ComponentName(this, RadarComplicationService::class.java)
+            )
+            requester.requestUpdateAll()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to request complication update", e)
+        }
     }
 
     @Composable
@@ -330,10 +381,11 @@ class MainActivity : ComponentActivity() {
             }
 
             // 接続状態バー（画面上部）- 長押しでデバッグアラート
-            val connectionColor = when (isConnected) {
-                true -> Color(0xFF00C853)   // 緑：接続済み
-                false -> Color(0xFFFF1744)  // 赤：切断
-                null -> Color.Gray           // グレー：不明
+            val connectionColor = when {
+                isInCooldown && isConnected == true -> Color(0xFFFFAB00) // オレンジ：クールダウン中
+                isConnected == true -> Color(0xFF00C853)   // 緑：接続済み
+                isConnected == false -> Color(0xFFFF1744)  // 赤：切断
+                else -> Color.Gray           // グレー：不明
             }
             Box(
                 modifier = Modifier
