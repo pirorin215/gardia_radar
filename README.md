@@ -48,6 +48,26 @@ GardiaRadarは、Bryton Gardia R300(R300L)の**自転車用後方レーダーデ
 
 ---
 
+## 🔧 ビルドに必要な前提（共有モジュール）
+
+本アプリは権限チェック・案内UIの共通モジュールを [composite build](https://docs.gradle.org/current/userguide/composite_builds.html)（`includeBuild`）で参照しています。**単独で clone しただけではビルドできない**ため、同じ親ディレクトリに以下2リポジトリも clone してください。
+
+```
+Android/  （任意の親ディレクトリ）
+├── permissioncore/          # 必須
+├── permissioncore-compose/  # 必須（本アプリは Compose 利用）
+└── gardia_radar/            # 本アプリ
+```
+
+```bash
+git clone https://github.com/pirorin215/permissioncore.git
+git clone https://github.com/pirorin215/permissioncore-compose.git
+git clone https://github.com/pirorin215/gardia_radar.git
+cd gardia_radar && ./gradlew assembleDebug
+```
+
+---
+
 ## 🏗 システムアーキテクチャ
 
 システムは2つのモジュールで構成され、Google Wearable Data Layer APIを通じて密接に連携します。
