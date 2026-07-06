@@ -72,6 +72,10 @@ dependencies {
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
 
+    // 共有モジュール（権限チェック／案内 UI）
+    implementation("com.pirorin215:permissioncore:1.0")
+    implementation("com.pirorin215:permissioncore-compose:1.0")
+
     // Wear OS communication
     implementation(libs.play.services.wearable)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")

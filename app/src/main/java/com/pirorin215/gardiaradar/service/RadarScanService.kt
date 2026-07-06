@@ -112,17 +112,13 @@ class RadarScanService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "RadarScanService onStartCommand")
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val hasBluetoothConnect = checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) ==
-                    android.content.pm.PackageManager.PERMISSION_GRANTED
-            val hasBluetoothScan = checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) ==
-                    android.content.pm.PackageManager.PERMISSION_GRANTED
-
-            if (!hasBluetoothConnect && !hasBluetoothScan) {
-                Log.e(TAG, "Bluetooth permissions not granted. Cannot start foreground service.")
-                stopSelf()
-                return START_NOT_STICKY
-            }
+        // 権限不足で startForeground / BLE スキャンを呼ぶと SecurityException でクラッシュするため、
+        // 起動前に必ずチェックして弾く。従来は「両方無い」時しか弾かないバグ（&&）があり、
+        // 片方だけ無いとスキャン開始で落ちていた。共有モジュールで SDK 差異も吸収。
+        if (!com.pirorin215.permissioncore.PermissionChecker.hasBleScanPermissions(this)) {
+            Log.e(TAG, "Bluetooth scan permissions not granted. Cannot start foreground service.")
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         startForeground(NOTIFICATION_ID, buildNotification().build())

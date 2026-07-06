@@ -1,14 +1,9 @@
 package com.pirorin215.gardiaradar
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
-import android.provider.Settings
-import android.content.ComponentName
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -39,13 +33,17 @@ import com.pirorin215.gardiaradar.ui.screen.SettingsScreen
 import com.pirorin215.gardiaradar.ui.theme.BleTemplateTheme
 import com.pirorin215.gardiaradar.viewModel.AppSettingsViewModel
 import com.pirorin215.gardiaradar.viewModel.RadarViewModel
+import com.pirorin215.permissioncore.PermissionChecker
+import com.pirorin215.permissioncore.PermissionGuard
+import com.pirorin215.permissioncore.PermissionRequirements
+import com.pirorin215.permissioncore.compose.PermissionGateScreen
+import com.pirorin215.permissioncore.compose.PermissionItem
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
-private fun isNotificationListenerEnabled(context: Context): Boolean {
-    val cn = ComponentName(context, com.pirorin215.gardiaradar.notification.GardiaNotificationListener::class.java)
-    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-    return flat != null && flat.contains(cn.flattenToString())
-}
+private fun isNotificationListenerEnabled(context: Context): Boolean =
+    PermissionChecker.isNotificationListenerEnabled(
+        context, com.pirorin215.gardiaradar.notification.GardiaNotificationListener::class.java
+    )
 
 class MainActivity : ComponentActivity() {
     private val radarViewModel: RadarViewModel by viewModel()
@@ -64,38 +62,36 @@ class MainActivity : ComponentActivity() {
             }
 
             BleTemplateTheme(darkTheme = isDarkTheme) {
-                var permissionsGranted by remember { mutableStateOf(false) }
+                val context = LocalContext.current
+                // 共有モジュールで SDK 差異を吸収した権限リスト。
+                val requiredPermissions = remember { PermissionRequirements.bleRuntimePermissions() }
+                // ランタイム権限（Bluetooth 系）の付与状態。拒否された場合もゲート画面を表示し続ける。
+                var permissionsGranted by remember {
+                    mutableStateOf(PermissionChecker.areAllGranted(context, requiredPermissions))
+                }
                 var currentScreen by remember { mutableStateOf("main") }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
-                ) { permissions ->
-                    permissionsGranted = permissions.values.all { it }
+                ) {
+                    // ダイアログの結果後、実際の付与状態で再判定。
+                    permissionsGranted = PermissionChecker.areAllGranted(context, requiredPermissions)
                 }
 
                 LaunchedEffect(Unit) {
-                    val required = mutableListOf(
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    )
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                        required.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    val missing = requiredPermissions.filterNot { PermissionChecker.isGranted(context, it) }
+                    if (missing.isNotEmpty()) {
+                        permissionLauncher.launch(missing.toTypedArray())
+                    } else {
+                        permissionsGranted = true
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        required.add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    permissionLauncher.launch(required.toTypedArray())
                 }
 
                 if (permissionsGranted) {
-                    val context = LocalContext.current
                     LaunchedEffect(Unit) {
+                        // 共有モジュール経由で安全起動（権限不足・bg-start 制限時は起動せず false）。
                         val serviceIntent = Intent(context, com.pirorin215.gardiaradar.service.RadarScanService::class.java)
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            context.startForegroundService(serviceIntent)
-                        } else {
-                            context.startService(serviceIntent)
-                        }
+                        PermissionGuard.safeStartBleScanService(context, serviceIntent)
                         radarViewModel.startScan()
                     }
 
@@ -122,11 +118,7 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { showBatteryDialog = false },
                             onOpenSettings = {
                                 try {
-                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
+                                    context.startActivity(PermissionGuard.appDetailsSettingsIntent(context))
                                 } catch (e: Exception) {
                                     Log.e("MainActivity", "Failed to open battery settings", e)
                                 }
@@ -140,10 +132,7 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { showNotificationAccessDialog = false },
                             onOpenSettings = {
                                 try {
-                                    val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
+                                    context.startActivity(PermissionGuard.notificationListenerSettingsIntent())
                                 } catch (e: Exception) {
                                     Log.e("MainActivity", "Failed to open notification settings", e)
                                 }
@@ -167,6 +156,40 @@ class MainActivity : ComponentActivity() {
                             onBack = { currentScreen = "main" }
                         )
                     }
+                } else {
+                    // 権限が揃っていない場合はゲート画面を表示（真っ暗を回避）。
+                    val listenerClass = remember {
+                        com.pirorin215.gardiaradar.notification.GardiaNotificationListener::class.java
+                    }
+                    val items = remember(permissionsGranted) {
+                        listOf(
+                            PermissionItem(
+                                label = "Bluetooth（スキャン・接続）",
+                                granted = PermissionChecker.hasBleScanPermissions(context),
+                            ),
+                            PermissionItem(
+                                label = "通知の表示",
+                                granted = PermissionChecker.hasPostNotifications(context),
+                                settingsIntent = PermissionGuard.appDetailsSettingsIntent(context),
+                            ),
+                            PermissionItem(
+                                label = "通知アクセス（常駐のため）",
+                                granted = PermissionChecker.isNotificationListenerEnabled(context, listenerClass),
+                                settingsIntent = PermissionGuard.notificationListenerSettingsIntent(),
+                            ),
+                        )
+                    }
+                    PermissionGateScreen(
+                        items = items,
+                        onRequestRuntimePermissions = {
+                            val missing = requiredPermissions.filterNot { PermissionChecker.isGranted(context, it) }
+                            if (missing.isNotEmpty()) {
+                                permissionLauncher.launch(missing.toTypedArray())
+                            } else {
+                                permissionsGranted = true
+                            }
+                        },
+                    )
                 }
             }
         }

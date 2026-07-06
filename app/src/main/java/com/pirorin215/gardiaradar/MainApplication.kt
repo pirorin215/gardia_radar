@@ -2,7 +2,6 @@ package com.pirorin215.gardiaradar
 
 import android.app.Application
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import com.pirorin215.gardiaradar.di.appModule
 import com.pirorin215.gardiaradar.service.RadarScanService
@@ -34,17 +33,12 @@ class MainApplication : Application() {
         // スキャンサービスも確実に起動する。
         // BootCompletedReceiver や START_STICKY で再開されるケースを補完し、
         // プロセスが生きている限りスキャンが稼働し続けるようにする。
-        // Android 12+ のバックグラウンド開始制限に引っかかる場合は例外が飛ぶので安全に無視する
-        // （その場合は既存の Boot / Activity / START_STICKY 経由で起動される）。
-        try {
-            val serviceIntent = Intent(this, RadarScanService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not start RadarScanService from Application onCreate", e)
+        // ただし権限未付与状態で起動すると Service 側で SecurityException クラッシュするため、
+        // 共有モジュール経由で権限チェック＋安全起動する（不足時は起動せず Log 出力）。
+        val serviceIntent = Intent(this, RadarScanService::class.java)
+        val started = com.pirorin215.permissioncore.PermissionGuard.safeStartBleScanService(this, serviceIntent)
+        if (!started) {
+            Log.w(TAG, "Could not start RadarScanService (permissions missing or bg-start blocked).")
         }
     }
 }
