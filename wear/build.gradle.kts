@@ -12,7 +12,8 @@ android {
         applicationId = "com.pirorin215.gardiaradar"
         minSdk = 30
         targetSdk = 33
-        versionCode = 1
+        // 埋め込み再配布で更新が効くようビルド時刻ベース(分)に自動増分(app側と同じ式)
+        versionCode = (System.currentTimeMillis() / 60000L).toInt()
         versionName = "1.0"
     }
 

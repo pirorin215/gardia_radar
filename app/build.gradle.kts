@@ -13,7 +13,8 @@ android {
         applicationId = "com.pirorin215.gardiaradar"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        // debugの入れ直しがウォッチで再配布されるようビルド時刻ベース(分)に自動増分
+        versionCode = (System.currentTimeMillis() / 60000L).toInt()
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
