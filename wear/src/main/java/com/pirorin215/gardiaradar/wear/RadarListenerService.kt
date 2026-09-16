@@ -1,7 +1,6 @@
 package com.pirorin215.gardiaradar.wear
 
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -14,7 +13,6 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
-import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 
@@ -22,6 +20,7 @@ class RadarListenerService : WearableListenerService() {
 
     companion object {
         private const val TAG = "RadarListenerService"
+        private const val COOLDOWN_TIMEOUT_MS = 60_000L
         const val PATH_RADAR_ALERT = "/radar-alert"
         const val ACTION_DEBUG_ALERT = "com.pirorin215.gardiaradar.wear.ACTION_DEBUG_ALERT"
         const val ACTION_DEBUG_CLEAR = "com.pirorin215.gardiaradar.wear.ACTION_DEBUG_CLEAR"
@@ -31,7 +30,6 @@ class RadarListenerService : WearableListenerService() {
     private var mediaPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
     private val alarmTimeoutRunnable = Runnable { stopAlert() }
-    private val COOLDOWN_TIMEOUT_MS = 60_000L
     private val cooldownTimeoutRunnable = Runnable { clearCooldown() }
 
     private val debugAlertReceiver = object : BroadcastReceiver() {
@@ -100,11 +98,12 @@ class RadarListenerService : WearableListenerService() {
     private fun startAlert(jsonData: String) {
         Log.d(TAG, "Starting alert...")
 
-        // 音・振動設定を確認
+        // 音・振動・省電力設定を確認
         val prefs = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
         val silentMode = prefs.getBoolean(WearableDataListener.PREF_KEY_SILENT_MODE, false)
         val soundEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_SOUND_ENABLED, true) && !silentMode
         val vibrationEnabled = prefs.getBoolean(WearableDataListener.PREF_KEY_ALERT_VIBRATION_ENABLED, true)
+        val powerSaving = prefs.getBoolean(WearableDataListener.PREF_KEY_POWER_SAVING, false)
 
         // 1. アラーム音を1回だけ再生（先に開始してMediaPlayerの準備時間を確保）
         if (soundEnabled) {
@@ -124,9 +123,6 @@ class RadarListenerService : WearableListenerService() {
         handler.postDelayed(alarmTimeoutRunnable, 4000L)
 
         // 4. 省電力モードでなければMainActivityを前面に持ってくる
-        val powerSaving = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(WearableDataListener.PREF_KEY_POWER_SAVING, false)
-
         if (!powerSaving) {
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -152,7 +148,7 @@ class RadarListenerService : WearableListenerService() {
         getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE).edit()
             .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, true)
             .apply()
-        updateComplications()
+        requestRadarComplicationUpdate()
         sendBroadcast(Intent(WearableDataListener.ACTION_COOLDOWN_STARTED))
         handler.removeCallbacks(cooldownTimeoutRunnable)
         handler.postDelayed(cooldownTimeoutRunnable, COOLDOWN_TIMEOUT_MS)
@@ -164,19 +160,7 @@ class RadarListenerService : WearableListenerService() {
         getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE).edit()
             .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, false)
             .apply()
-        updateComplications()
-    }
-
-    private fun updateComplications() {
-        try {
-            val requester = ComplicationDataSourceUpdateRequester.create(
-                this,
-                ComponentName(this, RadarComplicationService::class.java)
-            )
-            requester.requestUpdateAll()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to request complication update", e)
-        }
+        requestRadarComplicationUpdate()
     }
 
     private fun startAlarmSound() {

@@ -1,7 +1,6 @@
 package com.pirorin215.gardiaradar.wear
 
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -14,7 +13,6 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -117,9 +115,10 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
-                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    batteryLevel = if (level > 0 && scale > 0) (level * 100) / scale else -1
+                    batteryLevel = batteryPercent(
+                        intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+                        intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    )
                 }
                 WearableDataListener.ACTION_RADAR_BATTERY -> {
                     radarBatteryLevel = intent.getIntExtra("level", -1)
@@ -156,17 +155,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 電池残量%を計算する。読み取れない場合は -1。 */
+    private fun batteryPercent(level: Int, scale: Int): Int =
+        if (level > 0 && scale > 0) (level * 100) / scale else -1
+
     private fun updateBatteryLevel() {
-        val batteryStatus: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        batteryStatus?.let {
-            val level: Int = it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-            val scale: Int = it.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            batteryLevel = if (level > 0 && scale > 0) {
-                (level * 100) / scale
-            } else {
-                -1
-            }
-        }
+        val batteryStatus = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return
+        batteryLevel = batteryPercent(
+            batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1),
+            batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        )
     }
 
     private fun readInitialState() {
@@ -262,15 +260,8 @@ class MainActivity : ComponentActivity() {
             .edit()
             .putBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, active)
             .apply()
-        try {
-            val requester = ComplicationDataSourceUpdateRequester.create(
-                this,
-                ComponentName(this, RadarComplicationService::class.java)
-            )
-            requester.requestUpdateAll()
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Failed to request complication update", e)
-        }
+        // コンプリケーションはプロセス生存とは無関係に状態を読むため、Prefs の同期が必要
+        requestRadarComplicationUpdate()
     }
 
     @Composable

@@ -2,6 +2,7 @@ package com.pirorin215.gardiaradar.wear
 
 import android.app.PendingIntent
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.util.Log
@@ -24,11 +25,7 @@ class RadarComplicationService : ComplicationDataSourceService() {
         super.onComplicationActivated(complicationInstanceId, type)
         Log.d("RadarComplication", "onComplicationActivated: instanceId=$complicationInstanceId")
         // コンプリケーションが追加された直後に更新を要求
-        val requester = ComplicationDataSourceUpdateRequester.create(
-            this,
-            ComponentName(this, RadarComplicationService::class.java)
-        )
-        requester.requestUpdateAll()
+        requestRadarComplicationUpdate()
     }
 
     override fun onComplicationRequest(
@@ -38,9 +35,9 @@ class RadarComplicationService : ComplicationDataSourceService() {
         Log.d("RadarComplication", "onComplicationRequest: type=${request.complicationType}")
 
         // SharedPreferencesから接続状態・クールダウン状態を取得
-        val prefs = getSharedPreferences("radar_prefs", MODE_PRIVATE)
-        val isConnected = prefs.getBoolean("isConnected", false)
-        val isInCooldown = prefs.getBoolean("inCooldown", false)
+        val prefs = getSharedPreferences(WearableDataListener.PREFS_NAME, MODE_PRIVATE)
+        val isConnected = prefs.getBoolean(WearableDataListener.PREF_KEY_CONNECTED, false)
+        val isInCooldown = prefs.getBoolean(WearableDataListener.PREF_KEY_IN_COOLDOWN, false)
         Log.d("RadarComplication", "State from prefs: connected=$isConnected, cooldown=$isInCooldown")
 
         val iconRes = when {
@@ -120,5 +117,20 @@ class RadarComplicationService : ComplicationDataSourceService() {
             }
             else -> null
         }
+    }
+}
+
+/**
+ * RadarComplicationService の全コンプリケーションに再描画を要求する。
+ * 複数コンポーネントから呼ばれるため、要求失敗で呼び出し側をクラッシュさせない。
+ */
+internal fun Context.requestRadarComplicationUpdate() {
+    try {
+        ComplicationDataSourceUpdateRequester.create(
+            this,
+            ComponentName(this, RadarComplicationService::class.java)
+        ).requestUpdateAll()
+    } catch (e: Exception) {
+        Log.e("RadarComplication", "Failed to request complication update", e)
     }
 }

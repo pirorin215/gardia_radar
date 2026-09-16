@@ -1,6 +1,5 @@
 package com.pirorin215.gardiaradar.wear
 
-import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
@@ -10,13 +9,14 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
-import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
+import java.util.ArrayList
 
 class WearableDataListener : WearableListenerService() {
 
@@ -98,7 +98,7 @@ class WearableDataListener : WearableListenerService() {
 
         val intent = Intent(ACTION_TARGETS_UPDATED).apply {
             putExtra("targetCount", targetCount)
-            putIntegerArrayListExtra("distances", java.util.ArrayList(distances))
+            putIntegerArrayListExtra("distances", ArrayList(distances))
         }
         sendBroadcast(intent)
     }
@@ -146,7 +146,7 @@ class WearableDataListener : WearableListenerService() {
         }
         sendBroadcast(intent)
 
-        updateComplications()
+        requestRadarComplicationUpdate()
         playConnectionFeedback(isConnected)
         bringMainActivityToFront()
         sendWatchBatteryToPhone(force = true)
@@ -189,39 +189,36 @@ class WearableDataListener : WearableListenerService() {
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
             .putBoolean(PREF_KEY_IN_COOLDOWN, false)
             .apply()
-        updateComplications()
+        requestRadarComplicationUpdate()
         sendBroadcast(Intent(ACTION_COOLDOWN_CLEARED))
     }
 
     private fun sendWatchBatteryToPhone(force: Boolean) {
         try {
-            val batteryStatus: Intent? = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            batteryStatus?.let {
-                val level = it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                val scale = it.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                val batteryPct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
+            val status = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                ?: return
+            val level = status.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = status.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            val batteryPct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
+            if (batteryPct < 0) return
 
-                if (batteryPct >= 0) {
-                    val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    val lastLevel = prefs.getInt(PREF_KEY_LAST_BATTERY_LEVEL, -1)
-                    val lastTime = prefs.getLong(PREF_KEY_LAST_BATTERY_TIME, 0L)
-                    val now = System.currentTimeMillis()
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            val lastLevel = prefs.getInt(PREF_KEY_LAST_BATTERY_LEVEL, -1)
+            val lastTime = prefs.getLong(PREF_KEY_LAST_BATTERY_TIME, 0L)
+            val now = System.currentTimeMillis()
+            // 変化がなく5分以内の再送は抑止する（force は常に送る）
+            if (!force && batteryPct == lastLevel && now - lastTime <= 300_000L) return
 
-                    if (force || batteryPct != lastLevel || (now - lastTime) > 300_000L) {
-                        val dataClient = Wearable.getDataClient(this)
-                        val putDataMapReq = com.google.android.gms.wearable.PutDataMapRequest.create("/wear-battery")
-                        putDataMapReq.dataMap.putInt("level", batteryPct)
-                        putDataMapReq.dataMap.putLong("timestamp", now)
-                        val putDataReq = putDataMapReq.asPutDataRequest().setUrgent()
-                        dataClient.putDataItem(putDataReq)
-                        
-                        prefs.edit()
-                            .putInt(PREF_KEY_LAST_BATTERY_LEVEL, batteryPct)
-                            .putLong(PREF_KEY_LAST_BATTERY_TIME, now)
-                            .apply()
-                    }
-                }
-            }
+            val putDataMapReq = PutDataMapRequest.create("/wear-battery")
+            putDataMapReq.dataMap.putInt("level", batteryPct)
+            putDataMapReq.dataMap.putLong("timestamp", now)
+            Wearable.getDataClient(this)
+                .putDataItem(putDataMapReq.asPutDataRequest().setUrgent())
+
+            prefs.edit()
+                .putInt(PREF_KEY_LAST_BATTERY_LEVEL, batteryPct)
+                .putLong(PREF_KEY_LAST_BATTERY_TIME, now)
+                .apply()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send watch battery to phone", e)
         }
@@ -279,18 +276,6 @@ class WearableDataListener : WearableListenerService() {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to bring MainActivity to front", e)
-        }
-    }
-
-    private fun updateComplications() {
-        try {
-            val requester = ComplicationDataSourceUpdateRequester.create(
-                this,
-                ComponentName(this, RadarComplicationService::class.java)
-            )
-            requester.requestUpdateAll()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to request complication update", e)
         }
     }
 }
