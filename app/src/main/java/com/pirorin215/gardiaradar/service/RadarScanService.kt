@@ -248,7 +248,7 @@ class RadarScanService : Service() {
             Log.e(TAG, "Scan failed with error code: $errorCode")
 
             // リトライ（指数バックオフ: 5s, 10s, 20s, 30s, 30s...）
-            val delayMs = minOf(5000L * (1L shl minOf(scanRetryCount, 2)), maxScanRetryDelay)
+            val delayMs = minOf(5000L * (1L shl minOf(scanRetryCount, 3)), maxScanRetryDelay)
             scanRetryCount++
             Log.w(TAG, "Retrying scan in ${delayMs}ms (attempt $scanRetryCount)")
             scanRetryJob?.cancel()
