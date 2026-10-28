@@ -51,6 +51,13 @@ class RadarScanService : Service() {
     private val maxScanRetryDelay = 30_000L // 最大30秒
     private var lastScanStartTime = 0L
     private val MIN_SCAN_INTERVAL_MS = 6000L // Android制限(30秒間5回)に対する安全マージン
+    // startScanが受理されてスキャン中か。stopScanは「登録済みコールバック」に対してのみ
+    // 呼ぶ必要がある: 未登録状態でstopScanするとBluetoothスタックがアプリのスキャン登録を
+    // unregisterし("onError(): Unregistering the app")、以後のstartScanがすべて
+    // error 2(APPLICATION_REGISTRATION_FAILED)になる(Pixel 10で実測・BTClockMob v1.4.7他で根治済み)
+    // binder コールバックと IO コルーチン(リトライ)の双方から読み書きされるため可視性を保証
+    @Volatile
+    private var isScanning = false
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -190,14 +197,25 @@ class RadarScanService : Service() {
             null
         }
 
-        bluetoothAdapter?.bluetoothLeScanner?.startScan(filters, scanSettings, bleScanCallback)
+        // scanner の取得に失敗した場合(BTが直後にOFFになった等)は startScan を呼ばず
+        // isScanning も立てない(未開始のまま「スキャン中」扱いにすると後続の停止系が壊れる)
+        val scanner = bluetoothAdapter?.bluetoothLeScanner
+        if (scanner == null) {
+            Log.w(TAG, "BluetoothLeScanner unavailable - scan not started")
+            return
+        }
+        scanner.startScan(filters, scanSettings, bleScanCallback)
         scanRetryCount = 0
+        isScanning = true
     }
 
     @SuppressLint("MissingPermission")
     private fun stopBleScan() {
+        // 未登録状態でのstopScanを禁止(stopScanは「登録済みコールバック」にのみ有効)
+        if (!isScanning) return
         Log.d(TAG, "Stopping BLE scan in service.")
         bluetoothAdapter?.bluetoothLeScanner?.stopScan(bleScanCallback)
+        isScanning = false
     }
 
     private val bleScanCallback = @SuppressLint("MissingPermission") object : ScanCallback() {
@@ -246,6 +264,7 @@ class RadarScanService : Service() {
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             Log.e(TAG, "Scan failed with error code: $errorCode")
+            isScanning = false
 
             // リトライ（指数バックオフ: 5s, 10s, 20s, 30s, 30s...）
             val delayMs = minOf(5000L * (1L shl minOf(scanRetryCount, 3)), maxScanRetryDelay)
